@@ -1,31 +1,44 @@
-// #![cfg(target_arch = "wasm32")]
-
 use std::cmp::max;
 use std::collections::BTreeMap;
 use yew::prelude::*;
 use gloo::timers::callback::{Timeout};
+use crate::*;
+use web_sys::HtmlTextAreaElement;
 
 pub struct App {
+    input: String,
+    output: String,
 }
 
 #[derive(Clone, Debug)]
 pub enum AppMessage {
-    DummyMessage,
+    NewText(String),
 }
 
+const LOCAL_STORAGE_KEY: &'static str = "INPUT";
 
 impl Component for App {
     type Message = AppMessage;
     type Properties = ();
 
-    fn create(_ctx: &Context<Self>) -> Self {
+    fn create(ctx: &Context<Self>) -> Self {
+        let local_storage = web_sys::window().unwrap().local_storage().unwrap().unwrap();
+        let input = local_storage.get_item(LOCAL_STORAGE_KEY).unwrap().unwrap_or(String::new());
+        ctx.link().send_message(AppMessage::NewText(input));
         Self {
+            input: "".to_string(),
+            output: String::new(),
         }
     }
 
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
-            AppMessage::DummyMessage => {
+            AppMessage::NewText(contents) => {
+                self.input = contents;
+                let local_storage = web_sys::window().unwrap().local_storage().unwrap().unwrap();
+                local_storage.set_item(LOCAL_STORAGE_KEY, &self.input);
+                self.output = day1::puzzle(&self.input);
+                // self.output = b.unwrap();
                 true
             }
         }
@@ -33,9 +46,26 @@ impl Component for App {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         html! {
-        <div class="flex flex-row text-gray-100 border-gray-400 m-2 mx-3">
-            <div class="p-2 gap-y-2 border border-gray-400 flex-col rounded">
-                {"ABCD"}
+        <div class="flex flex-column gap-2 text-gray-100 border-gray-400 m-2 mx-3">
+            <div class="p-2 border border-gray-400 rounded">
+                {"Input"}
+            </div>
+            <textarea onchange={ctx.link().batch_callback(move |event: Event| {
+                    if let Some(input) = event.target_dyn_into::<HtmlTextAreaElement>() {
+                        Some(AppMessage::NewText(input.value()))
+                    } else {
+                        None
+                    }
+               })}
+                value={self.input.clone()}
+                class="rounded-md h-72 bg-gray-700"
+            >
+            </textarea>
+            <div class="p-2 border border-gray-400 rounded">
+                {"Output"}
+            </div>
+            <div class="p-2 border border-gray-400 rounded">
+                {&self.output}
             </div>
         </div>
         }
