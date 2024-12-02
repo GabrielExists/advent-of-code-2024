@@ -1,9 +1,8 @@
 use std::iter::zip;
-use regex::{Captures, Regex};
+use regex::{Regex};
 
-pub fn puzzle(input: &str) -> String {
+pub fn puzzle(input: &str) -> (String, String) {
     let re = Regex::new(r"^([0-9]*)   ([0-9]*)$").unwrap();
-    let mut output = String::new();
     let pairs = input.split("\n")
         .filter_map(|line| {
             re.captures(line)
@@ -45,5 +44,11 @@ pub fn puzzle(input: &str) -> String {
         }
     }
 
-    format!("{}", sum_of_distances)
+    let mut similarity_score = 0;
+    for left in left_list {
+        let occurrences = right_list.iter().filter(|right| **right == left).count() as u64;
+        similarity_score += left * occurrences;
+    }
+
+    (format!("{}", sum_of_distances), format!("{}", similarity_score))
 }

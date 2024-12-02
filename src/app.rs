@@ -1,13 +1,11 @@
-use std::cmp::max;
-use std::collections::BTreeMap;
 use yew::prelude::*;
-use gloo::timers::callback::{Timeout};
 use crate::*;
 use web_sys::HtmlTextAreaElement;
 
 pub struct App {
     input: String,
-    output: String,
+    first_output: String,
+    second_output: String,
 }
 
 #[derive(Clone, Debug)]
@@ -27,7 +25,8 @@ impl Component for App {
         ctx.link().send_message(AppMessage::NewText(input));
         Self {
             input: "".to_string(),
-            output: String::new(),
+            first_output: String::new(),
+            second_output: String::new(),
         }
     }
 
@@ -36,8 +35,8 @@ impl Component for App {
             AppMessage::NewText(contents) => {
                 self.input = contents;
                 let local_storage = web_sys::window().unwrap().local_storage().unwrap().unwrap();
-                local_storage.set_item(LOCAL_STORAGE_KEY, &self.input);
-                self.output = day1::puzzle(&self.input);
+                let _ = local_storage.set_item(LOCAL_STORAGE_KEY, &self.input);
+                (self.first_output, self.second_output) = day1::puzzle(&self.input);
                 // self.output = b.unwrap();
                 true
             }
@@ -46,7 +45,7 @@ impl Component for App {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         html! {
-        <div class="flex flex-column gap-2 text-gray-100 border-gray-400 m-2 mx-3">
+        <div class="flex flex-col gap-2 text-gray-100 border-gray-400 m-2 mx-3">
             <div class="p-2 border border-gray-400 rounded">
                 {"Input"}
             </div>
@@ -62,10 +61,16 @@ impl Component for App {
             >
             </textarea>
             <div class="p-2 border border-gray-400 rounded">
-                {"Output"}
+                {"Output for first part"}
             </div>
             <div class="p-2 border border-gray-400 rounded">
-                {&self.output}
+                {&self.first_output}
+            </div>
+            <div class="p-2 border border-gray-400 rounded">
+                {"Output for second part"}
+            </div>
+            <div class="p-2 border border-gray-400 rounded">
+                {&self.second_output}
             </div>
         </div>
         }
