@@ -17,6 +17,7 @@ serde = { version = "1", features = ["derive"] }
 gloo = "0.11"
 wasm-logger = "0.2.0"
 log = "0.4.19"
+regex = "1.9.1"
 
 
 #[workspace]
