@@ -33,8 +33,10 @@ impl Component for App {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         html! {
-        <div class="flex flex-row">
-            <div class="p-2 border border-slate-800 bg-blue-100 flex-col gap-y-2"></div>
+        <div class="flex flex-row text-gray-100 border-gray-400 m-2 mx-3">
+            <div class="p-2 gap-y-2 border border-gray-400 flex-col rounded">
+                {"ABCD"}
+            </div>
         </div>
         }
     }
