@@ -1,7 +1,8 @@
 use regex::Regex;
 use Direction::*;
+use crate::app::DayOutput;
 
-pub fn puzzle(input: &str) -> (String, String) {
+pub fn puzzle(input: &str) -> DayOutput {
     let re = Regex::new(r"([0-9]*) ").unwrap();
     let mut num_matches = 0;
     let reports = format!("{} ", input).split("\n")
@@ -27,17 +28,20 @@ pub fn puzzle(input: &str) -> (String, String) {
         })
         .collect::<Vec<_>>();
 
-    let _report_length = reports.len();
+    let report_length = reports.len();
     let mut safe_reports = 0;
     let mut safe_reports_allowing_one = 0;
-    let mut error_message = format!("{:?}", reports);
-    for (index, report) in reports.into_iter().enumerate() {
+    let mut error_message = None;
+    for (_index, report) in reports.into_iter().enumerate() {
         match judge_safety(&report) {
             Ok(()) => {
                 safe_reports += 1;
                 safe_reports_allowing_one += 1;
             }
             Err(error) => {
+                if let None = error_message {
+                    error_message = Some(error);
+                }
                 for i in 0..report.len() {
                     let mut current_report = report.clone();
                     current_report.remove(i);
@@ -52,7 +56,11 @@ pub fn puzzle(input: &str) -> (String, String) {
             }
         }
     }
-    (format!("{}", safe_reports), format!("{:?}", safe_reports_allowing_one))
+    DayOutput {
+        silver_output: format!("{}", safe_reports),
+        gold_output: format!("{:?}", safe_reports_allowing_one),
+        diagnostic: format!("Num reports: {}, first error message \n{:?}", report_length, error_message),
+    }
 }
 
 enum Direction {

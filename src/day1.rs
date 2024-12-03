@@ -1,7 +1,8 @@
 use std::iter::zip;
 use regex::{Regex};
+use crate::app::DayOutput;
 
-pub fn puzzle(input: &str) -> (String, String) {
+pub fn puzzle(input: &str) -> DayOutput {
     let re = Regex::new(r"^([0-9]*)   ([0-9]*)$").unwrap();
     let pairs = input.split("\n")
         .filter_map(|line| {
@@ -45,10 +46,14 @@ pub fn puzzle(input: &str) -> (String, String) {
     }
 
     let mut similarity_score = 0;
-    for left in left_list {
-        let occurrences = right_list.iter().filter(|right| **right == left).count() as u64;
+    for left in left_list.iter() {
+        let occurrences = right_list.iter().filter(|right| **right == *left).count() as u64;
         similarity_score += left * occurrences;
     }
 
-    (format!("{}", sum_of_distances), format!("{}", similarity_score))
+    DayOutput {
+        silver_output: format!("{}", sum_of_distances),
+        gold_output: format!("{}", similarity_score),
+        diagnostic: format!("{:?}, {:?}", left_list, right_list),
+    }
 }
