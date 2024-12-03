@@ -29,18 +29,30 @@ pub fn puzzle(input: &str) -> (String, String) {
 
     let _report_length = reports.len();
     let mut safe_reports = 0;
+    let mut safe_reports_allowing_one = 0;
     let mut error_message = format!("{:?}", reports);
     for (index, report) in reports.into_iter().enumerate() {
-        match judge_safety(report) {
+        match judge_safety(&report) {
             Ok(()) => {
                 safe_reports += 1;
+                safe_reports_allowing_one += 1;
             }
             Err(error) => {
-                // error_message = Some(format!("Index {}: {}", index, error));
+                for i in 0..report.len() {
+                    let mut current_report = report.clone();
+                    current_report.remove(i);
+                    match judge_safety(&current_report) {
+                        Ok(()) => {
+                            safe_reports_allowing_one += 1;
+                            break;
+                        }
+                        Err(_) => {}
+                    }
+                }
             }
         }
     }
-    (format!("{}", safe_reports), format!("{:?}", error_message))
+    (format!("{}", safe_reports), format!("{:?}", safe_reports_allowing_one))
 }
 
 enum Direction {
@@ -49,7 +61,7 @@ enum Direction {
     Decreasing,
 }
 
-fn judge_safety(report: Vec<u64>) -> Result<(), String> {
+fn judge_safety(report: &Vec<u64>) -> Result<(), String> {
     let mut stored_previous = None;
     let mut direction = Undetermined;
     for (index, level) in report.into_iter().enumerate() {
