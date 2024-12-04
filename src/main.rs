@@ -2,6 +2,7 @@ mod app;
 mod day1;
 mod day2;
 mod day3;
+mod day4;
 
 #[cfg(target_arch = "wasm32")]
 use app::App;
