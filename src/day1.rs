@@ -1,6 +1,6 @@
 use std::iter::zip;
 use regex::{Regex};
-use crate::app::DayOutput;
+use crate::app::{DayOutput, Diagnostic};
 
 pub fn puzzle(input: &str) -> DayOutput {
     let re = Regex::new(r"^([0-9]*)   ([0-9]*)$").unwrap();
@@ -54,6 +54,6 @@ pub fn puzzle(input: &str) -> DayOutput {
     DayOutput {
         silver_output: format!("{}", sum_of_distances),
         gold_output: format!("{}", similarity_score),
-        diagnostic: format!("{:?}, {:?}", left_list, right_list),
+        diagnostic: Diagnostic::simple(format!("{:?}, {:?}", left_list, right_list)),
     }
 }

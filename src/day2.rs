@@ -1,6 +1,6 @@
 use regex::Regex;
 use Direction::*;
-use crate::app::DayOutput;
+use crate::app::{DayOutput, Diagnostic};
 
 pub fn puzzle(input: &str) -> DayOutput {
     let re = Regex::new(r"([0-9]*) ").unwrap();
@@ -59,7 +59,7 @@ pub fn puzzle(input: &str) -> DayOutput {
     DayOutput {
         silver_output: format!("{}", safe_reports),
         gold_output: format!("{:?}", safe_reports_allowing_one),
-        diagnostic: format!("Num reports: {}, first error message \n{:?}", report_length, error_message),
+        diagnostic: Diagnostic::simple(format!("Num reports: {}, first error message \n{:?}", report_length, error_message)),
     }
 }
 

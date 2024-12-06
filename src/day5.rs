@@ -1,4 +1,4 @@
-use crate::app::DayOutput;
+use crate::app::{DayOutput, Diagnostic};
 
 pub fn puzzle(input: &str) -> DayOutput {
     let mut split = input.split("\n\n");
@@ -82,13 +82,13 @@ pub fn puzzle(input: &str) -> DayOutput {
         DayOutput {
             silver_output: format!("{}", sum_of_correct_middle_pages),
             gold_output: format!("{}", sum_of_incorrect_middle_pages),
-            diagnostic: format!("{:?}", errors),
+            diagnostic: Diagnostic::simple(format!("{:?}", errors)),
         }
     } else {
         DayOutput {
             silver_output: "".to_string(),
             gold_output: "".to_string(),
-            diagnostic: "Failed to split".to_string(),
+            diagnostic: Diagnostic::simple("Failed to split".to_string()),
         }
     }
 }

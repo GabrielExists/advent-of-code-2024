@@ -1,5 +1,5 @@
 use regex::{Match, Regex};
-use crate::app::DayOutput;
+use crate::app::{DayOutput, Diagnostic};
 
 
 pub fn puzzle(input: &str) -> DayOutput {
@@ -62,7 +62,7 @@ pub fn puzzle(input: &str) -> DayOutput {
         silver_output: format!("{}", silver_sum),
         gold_output: format!("{}", gold_sum),
         // diagnostic: format!("Actions: {:?}, Captures: {:#?}", actions, capture_summary[0]),
-        diagnostic: format!("Actions: {:?}", actions),
+        diagnostic: Diagnostic::simple(format!("Actions: {:?}", actions)),
     }
 }
 

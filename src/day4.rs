@@ -1,4 +1,4 @@
-use crate::app::DayOutput;
+use crate::app::{DayOutput, Diagnostic};
 
 #[derive(Clone, Debug)]
 enum Letter {
@@ -117,7 +117,7 @@ pub fn puzzle(input: &str) -> DayOutput {
     DayOutput {
         silver_output: format!("{}", num_found),
         gold_output: format!("{}", num_found_gold),
-        diagnostic: format!("errors: {:?}, grid: {:?}", errors, grid.get(1)),
+        diagnostic: Diagnostic::simple(format!("errors: {:?}, grid: {:?}", errors, grid.get(1))),
     }
 }
 

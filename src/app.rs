@@ -1,6 +1,7 @@
 use yew::prelude::*;
 use crate::*;
 use web_sys::HtmlTextAreaElement;
+use yew_icons::IconId;
 
 pub struct App {
     days: Vec<Day>,
@@ -9,13 +10,14 @@ pub struct App {
     input: String,
     silver_output: String,
     gold_output: String,
-    diagnostic_output: String,
+    diagnostic: Diagnostic,
+    tab_index: usize,
 }
 
 pub struct DayOutput {
     pub silver_output: String,
     pub gold_output: String,
-    pub diagnostic: String,
+    pub diagnostic: Diagnostic,
 }
 pub type DayFunction = fn(&str) -> DayOutput;
 
@@ -30,6 +32,7 @@ pub struct Day {
 pub enum AppMessage {
     NewText(String),
     SetDay(usize),
+    TabClicked(usize),
 }
 
 const LOCAL_STORAGE_INPUT: &'static str = "INPUT";
@@ -56,13 +59,47 @@ fn add_day(function: DayFunction, index: &mut usize) -> Day {
     }
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct Diagnostic {
+    message: String,
+    tabs: Vec<Tab>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Tab {
+    pub title: String,
+    pub strings: Vec<String>,
+    pub grid: Vec<Vec<GridCell>>,
+}
+#[derive(Clone, Debug)]
+pub struct GridCell {
+    // pub icon: IconId,
+    pub text: String,
+    pub class: Classes,
+}
+
+impl Diagnostic {
+    pub fn simple(message: String) -> Self {
+        Diagnostic {
+            message,
+            tabs: vec![],
+        }
+    }
+    pub fn with_tabs(tabs: Vec<Tab>, message: String) -> Self {
+        Diagnostic {
+            message,
+            tabs,
+        }
+    }
+}
+
 impl App {
     fn refresh(&mut self) {
         if let Some((day_output, title_text)) = Self::get_refresh_values(&self.days, self.day_index, &self.input) {
             self.title_text = title_text;
             self.silver_output = day_output.silver_output;
             self.gold_output = day_output.gold_output;
-            self.diagnostic_output = day_output.diagnostic;
+            self.diagnostic = day_output.diagnostic;
         } else {
             self.silver_output = String::new();
             self.gold_output = String::new();
@@ -78,6 +115,24 @@ impl App {
             None
         }
     }
+}
+
+pub fn class_string(text: &'static str) -> Classes{
+    let mut split = text.split(" ");
+    if let Some(first) = split.next() {
+        split.into_iter().fold(classes!(first), |mut class, substring| {
+            class.extend(classes!(substring));
+            class
+        })
+    } else {
+        Classes::new()
+    }
+}
+
+pub fn merge(base: &'static str, additional: &Classes) -> Classes {
+    let mut base = class_string(base);
+    base.extend(additional);
+    base
 }
 
 impl Component for App {
@@ -99,7 +154,8 @@ impl Component for App {
                     input,
                     silver_output: day_output.silver_output,
                     gold_output: day_output.gold_output,
-                    diagnostic_output: day_output.diagnostic,
+                    diagnostic: day_output.diagnostic,
+                    tab_index: 0,
                 }
             }
             None => {
@@ -110,7 +166,8 @@ impl Component for App {
                     input,
                     silver_output: String::new(),
                     gold_output: String::new(),
-                    diagnostic_output: String::new(),
+                    diagnostic: Default::default(),
+                    tab_index: 0,
                 }
             }
         }
@@ -131,6 +188,10 @@ impl Component for App {
                 let local_storage = web_sys::window().unwrap().local_storage().unwrap().unwrap();
                 let _ = local_storage.set_item(LOCAL_STORAGE_INDEX, &format!("{}", self.day_index));
                 self.refresh();
+                true
+            }
+            AppMessage::TabClicked(index) => {
+                self.tab_index = index;
                 true
             }
         }
@@ -185,7 +246,52 @@ impl Component for App {
                     {"Diagnostic field"}
                 </div>
                 <div class="p-2 border border-gray-400 rounded">
-                    {&self.diagnostic_output}
+                    {&self.diagnostic.message}
+                </div>
+            </div>
+            <div class="flex flex-col gap-2 m-2">
+                <div class="flex flex-row">
+                    {for self.diagnostic.tabs.iter().enumerate().map(|(index, tab)|{
+                        html!{
+                    <button onclick={ctx.link().callback(move |_| AppMessage::TabClicked(index))} class={merge("p-1 m-1 border border-gray-400 rounded-md", &if self.tab_index == index {classes!("bg-slate-700")} else {classes!("")})}>
+                            {&tab.title}
+                    </button>
+                        }
+                    })}
+                </div>
+                <div>
+                    <button onclick={
+                        let index = self.tab_index;
+                        ctx.link().callback(move |_| AppMessage::TabClicked(index + 1))
+                    } class="p-1 m-1 border border-gray-400 rounded-md">
+                        {"Next tab"}
+                    </button>
+                </div>
+                <div class="p-4 flex flex-col border border-gray-400">
+                {if let Some(tab) = self.diagnostic.tabs.get(self.tab_index) {
+                    html! {
+                        <>
+                    {for tab.grid.iter().map(|row|{
+                        html! {
+                            <div class="flex flex-row">
+                        {for row.iter().map(|cell|{
+                            html! {
+                                // <Icon icon_id={cell.icon} width={"2em".to_string()} height={"2em".to_string()} />
+                                <div class={merge("w-4 h-4", &cell.class)}>
+                                    {&cell.text}
+                                </div>
+                            }
+                        })}
+                            </div>
+                        }
+                    })}
+                        </>
+                    }
+                } else {
+                    html! {
+                        <div class="p-2 font-mono">{"No tab info"}</div>
+                    }
+                }}
                 </div>
             </div>
         </div>
