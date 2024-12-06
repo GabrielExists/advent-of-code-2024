@@ -79,7 +79,6 @@ pub fn puzzle(input: &str) -> DayOutput {
             }
         }
 
-        let dummy = 0;
         DayOutput {
             silver_output: format!("{}", sum_of_correct_middle_pages),
             gold_output: format!("{}", sum_of_incorrect_middle_pages),
