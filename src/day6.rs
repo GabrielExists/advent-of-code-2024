@@ -7,11 +7,13 @@ enum Letter {
     Hash,
     Guard,
 }
+pub type Coord = (i32, i32);
+pub type Grid = Vec<Vec<Letter>>;
 
 pub fn puzzle(input: &str) -> DayOutput {
     let mut errors: Vec<String> = Vec::new();
     let mut starting_position = None;
-    let grid = input.split("\n").enumerate().map(|(y, line)| {
+    let mut grid = input.split("\n").enumerate().map(|(y, line)| {
         log::info!("{:?}", line);
         line.chars().enumerate().filter_map(|(x, character)| {
             log::info!("{:?}", character);
@@ -27,47 +29,82 @@ pub fn puzzle(input: &str) -> DayOutput {
                     None
                 }
             }
-        }).collect::<Vec<_>>()
-    }).collect::<Vec<_>>();
+        }).collect::<Vec<Letter>>()
+    }).collect::<Vec<Vec<Letter>>>();
 
-    let mut visited_locations = HashSet::new();
-    if let Some(starting_position) = starting_position {
-        let mut current_position = starting_position.clone();
-        let mut facing_dir = (0, -1);
-        loop {
-            visited_locations.insert(current_position);
-            let next_position = add_coord(current_position, facing_dir);
-            let next_tile = find_coord(&grid, next_position);
-            match next_tile {
-                None => {
-                    // We walked outside of bounds, we're done
-                    break;
+    let (ordinary_visited, blockage_locations) = if let Some(starting_position) = starting_position {
+        let starting_dir = (0, -1);
+        let (_looped, ordinary_visited) = find_visited(&grid, starting_position, starting_dir);
+
+        let mut blockage_locations = HashSet::new();
+        for blockage_location in ordinary_visited.iter() {
+            let blockage_location = blockage_location.clone();
+            if let Some(handle) = find_coord_mut(&mut grid, blockage_location) {
+                let original = handle.clone();
+                *handle = Letter::Hash;
+
+                let (looped, _visited) = find_visited(&grid, starting_position, starting_dir);
+
+                if looped {
+                    blockage_locations.insert(blockage_location);
                 }
-                Some(tile_type) => {
-                    match tile_type {
-                        Letter::Guard |
-                        Letter::Dot => {
-                            current_position = next_position;
-                        }
-                        Letter::Hash => {
-                            facing_dir = (-facing_dir.1, facing_dir.0);
-                        }
-                    }
+
+                if let Some(handle) = find_coord_mut(&mut grid, blockage_location) {
+                    *handle = original;
+                } else {
+                    errors.push(format!("Couldn't reset coord {:?}", blockage_location));
                 }
             }
         }
-
-    }
+        (ordinary_visited, blockage_locations)
+    } else {
+        (HashSet::new(), HashSet::new())
+    };
 
 
     DayOutput {
-        silver_output: format!("{}", visited_locations.len()),
-        gold_output: format!("{}", 0),
+        silver_output: format!("{}", ordinary_visited.len()),
+        gold_output: format!("{}", blockage_locations.len()),
         diagnostic: Diagnostic::simple(format!("errors: {:?}, starting_position: {:?}", errors, starting_position)),
     }
 }
 
-fn find_coord(grid: &Vec<Vec<Letter>>, coord: (i32, i32)) -> Option<Letter> {
+fn find_visited(grid: &Vec<Vec<Letter>>, starting_position: Coord, starting_dir: Coord) -> (bool, HashSet<Coord>){
+    let mut visited_locations = HashSet::new();
+    let mut visited_location_directions = HashSet::new();
+    let mut current_position = starting_position.clone();
+    let mut current_dir = starting_dir.clone();
+    let looped = loop {
+        let location_direction = (current_position, current_dir);
+        if visited_location_directions.contains(&location_direction) {
+            break true;
+        }
+        visited_location_directions.insert(location_direction);
+        visited_locations.insert(current_position);
+        let next_position = add_coord(current_position, current_dir);
+        let next_tile = find_coord(&grid, next_position);
+        match next_tile {
+            None => {
+                // We walked outside of bounds, we're done
+                break false;
+            }
+            Some(tile_type) => {
+                match tile_type {
+                    Letter::Guard |
+                    Letter::Dot => {
+                        current_position = next_position;
+                    }
+                    Letter::Hash => {
+                        current_dir = (-current_dir.1, current_dir.0);
+                    }
+                }
+            }
+        }
+    };
+    (looped, visited_locations)
+}
+
+fn find_coord(grid: &Vec<Vec<Letter>>, coord: Coord) -> Option<Letter> {
     let (x, y): (Option<usize>, Option<usize>) = (coord.0.try_into().ok(), coord.1.try_into().ok());
     if let (Some(x), Some(y)) = (x, y) {
         grid.get(y).map(|row| {
@@ -78,6 +115,17 @@ fn find_coord(grid: &Vec<Vec<Letter>>, coord: (i32, i32)) -> Option<Letter> {
     }
 }
 
-fn add_coord(first: (i32, i32), second: (i32, i32)) -> (i32, i32) {
+fn add_coord(first: Coord, second: Coord) -> Coord {
     (first.0 + second.0, first.1 + second.1)
+}
+
+fn find_coord_mut(grid: &mut Vec<Vec<Letter>>, coord: Coord) -> Option<&mut Letter> {
+    let (x, y): (Option<usize>, Option<usize>) = (coord.0.try_into().ok(), coord.1.try_into().ok());
+    if let (Some(x), Some(y)) = (x, y) {
+        grid.get_mut(y).map(|row| {
+            row.get_mut(x)
+        }).unwrap_or(None)
+    } else {
+        None
+    }
 }

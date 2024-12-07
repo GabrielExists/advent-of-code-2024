@@ -11,6 +11,7 @@ pub struct App {
     gold_output: String,
     diagnostic: Diagnostic,
     tab_index: usize,
+    up_to_date: bool,
 }
 
 pub struct DayOutput {
@@ -31,6 +32,7 @@ pub struct Day {
 pub enum AppMessage {
     NewText(String),
     SetDay(usize),
+    Run,
     TabClicked(usize),
 }
 
@@ -93,25 +95,31 @@ impl Diagnostic {
 }
 
 impl App {
-    fn refresh(&mut self) {
-        if let Some((day_output, title_text)) = Self::get_refresh_values(&self.days, self.day_index, &self.input) {
-            self.title_text = title_text;
-            self.silver_output = day_output.silver_output;
-            self.gold_output = day_output.gold_output;
-            self.diagnostic = day_output.diagnostic;
+    fn run(&mut self) {
+        if let Some(day) = self.days.get(self.day_index) {
+            let output = (day.puzzle)(&self.input);
+            self.silver_output = output.silver_output;
+            self.gold_output = output.gold_output;
+            self.diagnostic = output.diagnostic;
         } else {
-            self.silver_output = String::new();
-            self.gold_output = String::new();
-            self.title_text = "No day with that index found".to_string();
+            self.silver_output = format!("Day not found");
+            self.gold_output = format!("Day not found");
         }
+        self.up_to_date = true;
     }
-    fn get_refresh_values(days: &Vec<Day>, day_index: usize, input: &str) -> Option<(DayOutput, String)> {
-        let day = days.get(day_index);
-        if let Some(day) = day {
-            let day_output = (day.puzzle)(input);
-            Some((day_output, day.text.clone()))
+    fn refresh(&mut self) {
+        let (title_text, diagnostic) = Self::get_refresh_values(&self.days, self.day_index);
+        self.title_text = title_text;
+        self.diagnostic = diagnostic;
+        self.silver_output = String::new();
+        self.gold_output = String::new();
+        self.up_to_date = false;
+    }
+    fn get_refresh_values(days: &Vec<Day>, day_index: usize) -> (String, Diagnostic) {
+        if let Some(day) = days.get(day_index) {
+            (day.text.clone(), Diagnostic::simple(format!("Puzzle not yet run")))
         } else {
-            None
+            ("No day with that index found".to_string(), Default::default())
         }
     }
 }
@@ -143,31 +151,30 @@ impl Component for App {
         let local_storage = web_sys::window().unwrap().local_storage().unwrap().unwrap();
         let input = local_storage.get_item(LOCAL_STORAGE_INPUT).unwrap().unwrap_or(String::new());
         let index: usize = local_storage.get_item(LOCAL_STORAGE_INDEX).unwrap().map(|index| index.parse::<usize>().ok()).unwrap_or(None).unwrap_or(0);
-        let day_output = App::get_refresh_values(&days, index, &input);
-        match day_output {
-            Some((day_output, title_text)) => {
-                Self {
-                    days,
-                    day_index: index,
-                    title_text,
-                    input,
-                    silver_output: day_output.silver_output,
-                    gold_output: day_output.gold_output,
-                    diagnostic: day_output.diagnostic,
-                    tab_index: 0,
-                }
+        if let Some(day) = days.get(index) {
+            let day_text = day.text.clone();
+            Self {
+                days,
+                day_index: index,
+                title_text: day_text,
+                input,
+                silver_output: String::new(),
+                gold_output: String::new(),
+                diagnostic: Diagnostic::simple(format!("Puzzle not yet run")),
+                tab_index: 0,
+                up_to_date: false,
             }
-            None => {
-                Self {
-                    days,
-                    day_index: index,
-                    title_text: "No initial day with that index found".to_string(),
-                    input,
-                    silver_output: String::new(),
-                    gold_output: String::new(),
-                    diagnostic: Default::default(),
-                    tab_index: 0,
-                }
+        } else {
+            Self {
+                days,
+                day_index: index,
+                title_text: "No initial day with that index found".to_string(),
+                input,
+                silver_output: String::new(),
+                gold_output: String::new(),
+                diagnostic: Default::default(),
+                tab_index: 0,
+                up_to_date: false,
             }
         }
     }
@@ -179,7 +186,6 @@ impl Component for App {
                 let local_storage = web_sys::window().unwrap().local_storage().unwrap().unwrap();
                 let _ = local_storage.set_item(LOCAL_STORAGE_INPUT, &self.input);
                 self.refresh();
-                // self.output = b.unwrap();
                 true
             }
             AppMessage::SetDay(index) => {
@@ -187,6 +193,10 @@ impl Component for App {
                 let local_storage = web_sys::window().unwrap().local_storage().unwrap().unwrap();
                 let _ = local_storage.set_item(LOCAL_STORAGE_INDEX, &format!("{}", self.day_index));
                 self.refresh();
+                true
+            }
+            AppMessage::Run => {
+                self.run();
                 true
             }
             AppMessage::TabClicked(index) => {
@@ -229,6 +239,11 @@ impl Component for App {
                     class="rounded-md h-72 bg-gray-700"
                 >
                 </textarea>
+                <button onclick={
+                    ctx.link().callback(move |_| AppMessage::Run)
+                } class="p-2 m-2 border border-gray-400 rounded-md text-lg">
+                    {"Run"}
+                </button>
                 <div class="p-2 border-b border-gray-400 rounded">
                     {"Output for first part"}
                 </div>
