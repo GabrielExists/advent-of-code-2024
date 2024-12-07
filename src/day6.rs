@@ -1,68 +1,23 @@
 use std::collections::{HashMap, HashSet};
-use std::fmt::{Display, Formatter, Write};
-use std::process::Output;
-use crate::app::{class_string, DayOutput, Diagnostic, GridCell, Tab};
+use crate::app::{DayOutput, Diagnostic, Tab};
+use crate::day6_display::*;
 
 const ENABLE_HISTORY: bool = false;
 
+pub type Coord = (i32, i32);
+pub type Grid = Vec<Vec<Letter>>;
+
 #[derive(Clone, Debug)]
-enum Letter {
+pub enum Letter {
     Dot,
     Hash,
     Guard,
 }
-
-#[derive(Clone, Debug)]
-enum OutputLetter {
-    Dot,
-    Hash,
-    Guard,
-    Walked,
-    Checked,
-    Obstacle,
-    CheckingStartLocation,
-    CheckingObstacle,
-    Error,
-}
-
-impl Display for OutputLetter {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            OutputLetter::Dot => f.write_str("."),
-            OutputLetter::Hash => f.write_str("#"),
-            OutputLetter::Guard => f.write_str("^"),
-            OutputLetter::Walked => f.write_str("X"),
-            OutputLetter::Checked => f.write_str("/"),
-            OutputLetter::Obstacle => f.write_str("O"),
-            OutputLetter::CheckingStartLocation => f.write_str("C"),
-            OutputLetter::CheckingObstacle => f.write_str("Ø"),
-            OutputLetter::Error => f.write_str("!"),
-        }
-    }
-}
-
-impl From<&Letter> for OutputLetter {
-    fn from(value: &Letter) -> Self {
-        match value {
-            Letter::Dot => Self::Dot,
-            Letter::Hash => Self::Hash,
-            Letter::Guard => Self::Guard,
-        }
-    }
-}
-
-impl OutputLetter {
-    fn to_cell(&self) -> GridCell {
-        let class = match self {
-            OutputLetter::Dot => "",
-            OutputLetter::Hash => "",
-            _ => "",
-        };
-        GridCell {
-            text: self.to_string(),
-            class: class_string(&class),
-        }
-    }
+#[derive(PartialEq, Clone, Debug)]
+pub enum Loopable {
+    Yes,
+    No,
+    Doubtfully,
 }
 
 pub fn puzzle(input: &str) -> DayOutput {
@@ -88,6 +43,7 @@ pub fn puzzle(input: &str) -> DayOutput {
     let mut tabs = Vec::new();
     let mut visited_locations: HashMap<Coord, HashSet<Coord>> = HashMap::new();
     let mut blockage_locations = HashSet::new();
+    let mut doubtful_blockage_locations = HashSet::new();
     let mut history = Vec::new();
     if let Some(starting_position) = starting_position {
         let mut current_position = starting_position.clone();
@@ -114,31 +70,45 @@ pub fn puzzle(input: &str) -> DayOutput {
                             let (loopable, mut output_grid) = check_for_loopability(&grid, &visited_locations, current_position, dir_to_the_right);
                             apply_locations_to_output_grid(&mut output_grid, blockage_locations.iter().map(|a: &Coord| a.clone()), OutputLetter::Obstacle);
                             apply_locations_to_output_grid(&mut output_grid, vec![next_position].into_iter(), OutputLetter::CheckingObstacle);
-                            if loopable {
+
+                            let (loopable_bool, obstacle_letter) = match loopable {
+                                Loopable::Yes => {
+                                    (true, OutputLetter::Obstacle)
+                                }
+                                Loopable::Doubtfully => {
+                                    (true, OutputLetter::CheckingObstacle)
+                                }
+                                Loopable::No => {
+                                    (false, OutputLetter::Error)
+                                }
+                            };
+                            if loopable_bool {
                                 // If we'd walk right here, we'd end up looping, so we can add a blockage in front of here
                                 if ENABLE_HISTORY {
                                     history.push(format!("Add blockage at {:?}", next_position));
                                 }
                                 blockage_locations.insert(next_position);
+                                doubtful_blockage_locations.insert(next_position);
                                 apply_locations_to_output_grid(&mut output_grid, vec![next_position].into_iter(), OutputLetter::Obstacle);
-                                if step_number < 30 {
-                                    tabs.push(Tab {
-                                        title: format!("Ob {}", step_number),
-                                        strings: vec![],
-                                        grid: cells_from_output_grid(&output_grid)
-                                    });
-                                    step_number += 1;
-                                }
-                            } else {
-                                if step_number < 30 {
-                                    tabs.push(Tab {
-                                        title: format!("No {}", step_number),
-                                        strings: vec![],
-                                        grid: cells_from_output_grid(&output_grid),
-                                    });
-                                    step_number += 1;
-                                }
                             }
+                            if tabs.len() < 100 && loopable_bool {
+                                tabs.push(Tab {
+                                    title: match loopable {
+                                        Loopable::Yes => {
+                                            format!("O {}", step_number)
+                                        }
+                                        Loopable::No => {
+                                            format!("No {}", step_number)
+                                        }
+                                        Loopable::Doubtfully => {
+                                            format!("! {}", step_number)
+                                        }
+                                    },
+                                    strings: vec![],
+                                    grid: cells_from_output_grid(&output_grid),
+                                });
+                            }
+                            step_number += 1;
                             if ENABLE_HISTORY {
                                 history.push(format!("Walk {:?} with current: {:?}, next: {:?}", facing_dir, current_position, next_position));
                             }
@@ -157,7 +127,7 @@ pub fn puzzle(input: &str) -> DayOutput {
         }
     }
 
-    let mut output_grid = output_grid_from_grid(&grid);
+    let output_grid = output_grid_from_grid(&grid);
     let rows = cells_from_output_grid(&output_grid);
     tabs.insert(0, Tab {
         title: "Starting state".to_string(),
@@ -183,44 +153,22 @@ pub fn puzzle(input: &str) -> DayOutput {
     }
 }
 
-fn apply_locations_to_output_grid<T: IntoIterator<Item=Coord>>(output_grid: &mut Vec<Vec<OutputLetter>>, locations: T, new_letter: OutputLetter) {
-    for coord in locations.into_iter() {
-        let letter = find_output_coord_mut(output_grid, coord);
-        if let Some(letter) = letter {
-            *letter = new_letter.clone();
-        }
-    }
-}
-
-fn find_coord(grid: &Vec<Vec<Letter>>, coord: (i32, i32)) -> Option<Letter> {
-    let (x, y): (Option<usize>, Option<usize>) = (coord.0.try_into().ok(), coord.1.try_into().ok());
-    if let (Some(x), Some(y)) = (x, y) {
-        grid.get(y).map(|row| {
-            row.get(x).map(|letter| letter.clone())
-        }).unwrap_or(None)
-    } else {
-        None
-    }
-}
-
-fn add_coord(first: (i32, i32), second: (i32, i32)) -> (i32, i32) {
-    (first.0 + second.0, first.1 + second.1)
-}
-
-type Coord = (i32, i32);
-type Grid = Vec<Vec<Letter>>;
-
-fn check_for_loopability(grid: &Grid, initial_visited_locations: &HashMap<Coord, HashSet<Coord>>, starting_position: Coord, starting_dir: Coord) -> (bool, Vec<Vec<OutputLetter>>) {
+fn check_for_loopability(grid: &Grid, initial_visited_locations: &HashMap<Coord, HashSet<Coord>>, starting_position: Coord, starting_dir: Coord) -> (Loopable, Vec<Vec<OutputLetter>>) {
     let mut history = Vec::new();
     let mut current_position = starting_position;
     let mut facing_dir = starting_dir;
     let mut visited_locations = initial_visited_locations.clone();
     let mut checked_locations = HashSet::new();
     let loopable = loop {
+        if let Some(initial_footsteps_here) = initial_visited_locations.get(&current_position) {
+            if initial_footsteps_here.contains(&facing_dir) {
+                break Loopable::Yes;
+            }
+        }
         let footsteps_here = visited_locations.entry(current_position).or_insert(HashSet::new());
         if footsteps_here.contains(&facing_dir) {
             // We've walked here, in the same direction, before
-            break true;
+            break Loopable::Doubtfully;
         }
         footsteps_here.insert(facing_dir);
         let next_position = add_coord(current_position, facing_dir);
@@ -231,7 +179,7 @@ fn check_for_loopability(grid: &Grid, initial_visited_locations: &HashMap<Coord,
                     history.push(format!("Break with current: {:?}, next: {:?}", current_position, next_position));
                 }
                 // We walked outside of bounds, we're done
-                break false;
+                break Loopable::No;
             }
             Some(tile_type) => {
                 let dir_to_the_right = (-facing_dir.1, facing_dir.0);
@@ -265,29 +213,17 @@ fn check_for_loopability(grid: &Grid, initial_visited_locations: &HashMap<Coord,
     (loopable, output_grid)
 }
 
-fn cells_from_output_grid(grid: &Vec<Vec<OutputLetter>>) -> Vec<Vec<GridCell>> {
-    grid.iter().map(|row| {
-        row.iter().map(|letter| {
-            letter.to_cell()
-        }).collect::<Vec<GridCell>>()
-    }).collect::<Vec<Vec<GridCell>>>()
-}
-
-fn output_grid_from_grid(grid: &Vec<Vec<Letter>>) -> Vec<Vec<OutputLetter>> {
-    grid.iter().map(|row| {
-        row.iter().map(|letter| {
-            letter.into()
-        }).collect::<Vec<OutputLetter>>()
-    }).collect::<Vec<Vec<OutputLetter>>>()
-}
-
-fn find_output_coord_mut(grid: &mut Vec<Vec<OutputLetter>>, coord: (i32, i32)) -> Option<&mut OutputLetter> {
+pub fn find_coord(grid: &Vec<Vec<Letter>>, coord: (i32, i32)) -> Option<Letter> {
     let (x, y): (Option<usize>, Option<usize>) = (coord.0.try_into().ok(), coord.1.try_into().ok());
     if let (Some(x), Some(y)) = (x, y) {
-        grid.get_mut(y).map(|row| {
-            row.get_mut(x)
+        grid.get(y).map(|row| {
+            row.get(x).map(|letter| letter.clone())
         }).unwrap_or(None)
     } else {
         None
     }
+}
+
+pub fn add_coord(first: (i32, i32), second: (i32, i32)) -> (i32, i32) {
+    (first.0 + second.0, first.1 + second.1)
 }

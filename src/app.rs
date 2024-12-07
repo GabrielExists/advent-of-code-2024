@@ -1,7 +1,6 @@
 use yew::prelude::*;
 use crate::*;
 use web_sys::HtmlTextAreaElement;
-use yew_icons::IconId;
 
 pub struct App {
     days: Vec<Day>,
