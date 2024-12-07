@@ -1,4 +1,4 @@
-use crate::day6::*;
+use crate::day6_old::*;
 use std::fmt::{Display, Formatter};
 use std::convert::TryInto;
 use crate::app::*;
