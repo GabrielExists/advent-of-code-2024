@@ -242,7 +242,11 @@ impl Component for App {
                 <button onclick={
                     ctx.link().callback(move |_| AppMessage::Run)
                 } class="p-2 m-2 border border-gray-400 rounded-md text-lg">
-                    {"Run"}
+                    { if self.up_to_date {
+                        "Run"
+                    } else {
+                        "** Run **"
+                    } }
                 </button>
                 <div class="p-2 border-b border-gray-400 rounded">
                     {"Output for first part"}
@@ -285,6 +289,13 @@ impl Component for App {
                 {if let Some(tab) = self.diagnostic.tabs.get(self.tab_index) {
                     html! {
                         <>
+                    {for tab.strings.iter().map(|string|{
+                        html!{
+                            <div>
+                                {string}
+                            </div>
+                        }
+                    })}
                     {for tab.grid.iter().map(|row|{
                         html! {
                             <div class="flex flex-row">
