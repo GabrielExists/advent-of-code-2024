@@ -13,7 +13,7 @@ pub enum OutputLetter {
     Obstacle,
     CheckingStartLocation,
     CheckingObstacle,
-    Error,
+    Counter,
 }
 
 impl Display for OutputLetter {
@@ -27,7 +27,7 @@ impl Display for OutputLetter {
             OutputLetter::Obstacle => f.write_str("O"),
             OutputLetter::CheckingStartLocation => f.write_str("C"),
             OutputLetter::CheckingObstacle => f.write_str("Ø"),
-            OutputLetter::Error => f.write_str("!"),
+            OutputLetter::Counter => f.write_str("L"),
         }
     }
 }
