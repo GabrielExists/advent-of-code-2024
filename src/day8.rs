@@ -32,11 +32,14 @@ pub fn puzzle(input: &str) -> DayOutput {
     }
 
     let mut antipoles = HashSet::new();
+    let mut antipoles_repeating = HashSet::new();
     for (_, antenna_list) in antenna_lists.iter() {
         for (index, antenna_one) in antenna_list.iter().enumerate() {
             for antenna_two in antenna_list[index + 1..].iter() {
                 find_antipole(&mut antipoles, antenna_one, antenna_two, num_rows, num_columns);
                 find_antipole(&mut antipoles, antenna_two, antenna_one, num_rows, num_columns);
+                find_antipole_repeating(&mut antipoles_repeating, antenna_one, antenna_two, num_rows, num_columns);
+                find_antipole_repeating(&mut antipoles_repeating, antenna_two, antenna_one, num_rows, num_columns);
             }
         }
     }
@@ -44,16 +47,11 @@ pub fn puzzle(input: &str) -> DayOutput {
     log::info!("{:?}", grid);
     let mut pole_grid = grid.clone();
     apply_antipoles_to_grid(&mut pole_grid, &antipoles);
-    let sum = pole_grid.iter().fold(0, |acc, row|{
-        let subsum = row.iter().fold(0, |acc, cell| {
-            if cell.text == "#" {
-                acc + 1
-            } else {
-                acc
-            }
-        });
-        acc + subsum
-    });
+    let mut pole_grid_repeating = grid.clone();
+    apply_antipoles_to_grid(&mut pole_grid_repeating, &antipoles_repeating);
+
+    let sum = count_antipoles(&mut pole_grid);
+    let sum_repeating = count_antipoles(&mut pole_grid_repeating);
     let mut sorted_antipoles = antipoles.iter().collect::<Vec<_>>();
     sorted_antipoles.sort();
     let tabs = vec![
@@ -68,6 +66,11 @@ pub fn puzzle(input: &str) -> DayOutput {
             grid: pole_grid,
         },
         Tab {
+            title: "Output repeating".to_string(),
+            strings: vec![],
+            grid: pole_grid_repeating,
+        },
+        Tab {
             title: format!("list of length {}", sorted_antipoles.len()),
             strings: sorted_antipoles.into_iter().map(|a|format!("({},{})", a.0, a.1)).collect::<Vec<_>>(),
             grid: vec![],
@@ -75,9 +78,23 @@ pub fn puzzle(input: &str) -> DayOutput {
     ];
     DayOutput {
         silver_output: format!("{}", antipoles.len()),
-        gold_output: format!("{}", 0),
-        diagnostic: Diagnostic::with_tabs(tabs, format!("sum of debug view {}, rows {:?}, cols {:?}", sum, num_rows, num_columns)),
+        gold_output: format!("{}", antipoles_repeating.len()),
+        diagnostic: Diagnostic::with_tabs(tabs, format!("sum of debug view {}, {}, rows {:?}, cols {:?}", sum, sum_repeating, num_rows, num_columns)),
     }
+}
+
+fn count_antipoles(pole_grid: &mut Vec<Vec<GridCell>>) -> i32 {
+    let sum = pole_grid.iter().fold(0, |acc, row| {
+        let subsum = row.iter().fold(0, |acc, cell| {
+            if cell.text == "#" {
+                acc + 1
+            } else {
+                acc
+            }
+        });
+        acc + subsum
+    });
+    sum
 }
 
 fn apply_antipoles_to_grid(grid: &mut Vec<Vec<GridCell>>, antipoles: &HashSet<Coord>) {
@@ -95,9 +112,21 @@ fn find_antipole(antipoles: &mut HashSet<Coord>, antenna_one: &Coord, antenna_tw
     let difference = subtract_coord(*antenna_one, *antenna_two);
     let antipole = add_coord(*antenna_one, difference);
     if in_bounds(num_row, num_column, antipole) {
-        if !antipoles.contains(&antipole) {
+        antipoles.insert(antipole);
+    }
+}
+fn find_antipole_repeating(antipoles: &mut HashSet<Coord>, antenna_one: &Coord, antenna_two: &Coord, num_row: usize, num_column: Option<usize>) {
+    let difference = subtract_coord(*antenna_one, *antenna_two);
+    let mut scalar = 0;
+    loop {
+        let current_difference = multiply_coord(difference, scalar);
+        let antipole = add_coord(*antenna_one, current_difference);
+        if in_bounds(num_row, num_column, antipole) {
             antipoles.insert(antipole);
+        } else {
+            break;
         }
+        scalar += 1;
     }
 }
 
@@ -120,6 +149,9 @@ fn add_coord(first: Coord, second: Coord) -> Coord {
 
 fn subtract_coord(first: Coord, second: Coord) -> Coord {
     (first.0 - second.0, first.1 - second.1)
+}
+fn multiply_coord(coord: Coord, scalar: i32) -> Coord {
+    (coord.0 * scalar, coord.1 * scalar)
 }
 fn find_coord_mut<T>(grid: &mut Vec<Vec<T>>, coord: Coord) -> Option<&mut T> {
     let (x, y): (Option<usize>, Option<usize>) = (coord.0.try_into().ok(), coord.1.try_into().ok());
