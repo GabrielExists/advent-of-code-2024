@@ -12,6 +12,10 @@ impl<T> Grid<T> {}
 pub struct Coord((i32, i32));
 
 impl<T> Grid<T> {
+    pub fn new() -> Self {
+        Self(Vec::new())
+    }
+
     pub fn from<F>(input: &str, mut cell_function: F) -> Self
         where F: FnMut(char) -> T {
         let grid = input.split("\n").map(|row| {
@@ -39,7 +43,16 @@ impl<T> Grid<T> {
                 cell_function(character, x as i32, y as i32)
             }).collect::<Vec<T>>()
         }).filter(|a| !a.is_empty()).collect::<Vec<Vec<T>>>();
+
         Grid(grid)
+    }
+
+    pub fn add_row_from<U, F>(&mut self, input: &Vec<U>, cell_function: F)
+        where F: Fn(&U) -> T {
+        let new_row = input.iter().map(|item: &U| {
+            cell_function(item)
+        }).collect::<Vec<T>>();
+        self.0.push(new_row);
     }
 
     pub fn count<F>(&self, predicate: F) -> usize

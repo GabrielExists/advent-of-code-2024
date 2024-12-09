@@ -50,6 +50,7 @@ fn get_days() -> Vec<Day> {
     days.push(add_day(day6::puzzle, &mut index));
     days.push(add_day(day7::puzzle, &mut index));
     days.push(add_day(day8::puzzle, &mut index));
+    days.push(add_day(day9::puzzle, &mut index));
     days
 }
 
