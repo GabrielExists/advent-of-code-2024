@@ -2,7 +2,6 @@ use std::collections::HashSet;
 use crate::app::{DayOutput, Diagnostic, Tab};
 use crate::grid::Grid;
 
-
 pub fn puzzle(input: &str) -> DayOutput {
     let mut tabs = Vec::new();
     let mut grid = Grid::new();
@@ -61,43 +60,26 @@ fn puzzle_silver(input: &str) -> (Vec<Option<u64>>, Vec<Option<u64>>, Vec<String
     }
     let initial_disk_spaces = disk_spaces.clone();
 
-    let mut put_index = 0;
-    let mut current_held = None;
-    loop {
-        match current_held {
-            None => {
-                match disk_spaces.pop() {
-                    None => {
-                        // the disk is empty, stop.
-                        break;
-                    }
-                    Some(new_held) => {
-                        current_held = new_held;
-                    }
+    let mut slots_to_move = disk_spaces.iter()
+        .enumerate()
+        .filter_map(|(index, id)| match id {
+            None => None,
+            Some(id) => Some((index, *id)),
+        })
+        .collect::<Vec<(usize, u64)>>();
+
+    for (index, disk_space) in disk_spaces.iter_mut().enumerate() {
+        if disk_space.is_none() {
+            if let Some((popped_index, popped_id)) = slots_to_move.pop() {
+                if index >= popped_index {
+                    disk_spaces.truncate(std::cmp::min(index, popped_index) + 1);
+                    break;
+                } else {
+                    *disk_space = Some(popped_id);
                 }
-            }
-            Some(id) => {
-                match disk_spaces.get_mut(put_index) {
-                    None => {
-                        // We're past the end of the array.
-                        // This probably means we just popped the item in this slot,
-                        // so we put it back and end.
-                        disk_spaces.push(Some(id));
-                        break;
-                    }
-                    Some(slot) => {
-                        match slot {
-                            None => {
-                                // We found an empty slot, move the currently held object to here
-                                *slot = current_held.take();
-                            }
-                            Some(_) => {
-                                // We found an occupied slot, just keep moving to the right
-                            }
-                        }
-                        put_index += 1;
-                    }
-                }
+            } else {
+                errors.push(format!("Popped last input disk space for silver, at index {}", index));
+                break;
             }
         }
     }
@@ -138,11 +120,12 @@ fn puzzle_gold(input: &str) -> (Vec<Option<u64>>, Vec<Option<u64>>, Vec<String>)
             }
         }
     }
+    let initial_disk_spaces = disk_spaces.clone();
 
     let files_to_move = disk_spaces.iter()
         .rev()
-        .filter(|item|item.id.is_some())
-        .map(|item|item.clone())
+        .filter(|item| item.id.is_some())
+        .map(|item| item.clone())
         .collect::<Vec<DiskSpace>>();
 
     // Copy files
@@ -177,7 +160,6 @@ fn puzzle_gold(input: &str) -> (Vec<Option<u64>>, Vec<Option<u64>>, Vec<String>)
         }
     }
 
-    let initial_disk_spaces = disk_spaces.clone();
     (split_files(initial_disk_spaces), split_files(disk_spaces), errors)
 }
 
