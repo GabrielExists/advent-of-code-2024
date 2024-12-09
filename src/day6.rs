@@ -1,5 +1,7 @@
 use std::collections::HashSet;
+use std::ops::Deref;
 use crate::app::{DayOutput, Diagnostic, GridCell, Tab};
+use crate::grid::{Coord, Grid};
 
 #[derive(Clone, Debug)]
 pub enum Letter {
@@ -8,41 +10,35 @@ pub enum Letter {
     Guard,
 }
 
-pub type Coord = (i32, i32);
-
 pub fn puzzle(input: &str) -> DayOutput {
     let mut errors: Vec<String> = Vec::new();
     let mut starting_position = None;
     let mut tabs = Vec::new();
-    let mut grid = input.split("\n").enumerate().map(|(y, line)| {
-        log::info!("{:?}", line);
-        line.chars().enumerate().filter_map(|(x, character)| {
-            log::info!("{:?}", character);
-            match character {
-                '.' => Some(Letter::Dot),
-                '#' => Some(Letter::Hash),
-                '^' => {
-                    starting_position = Some((x as i32, y as i32));
-                    Some(Letter::Guard)
-                }
-                c => {
-                    errors.push(format!("Found invalid character in input: {}", c));
-                    None
-                }
+    let mut grid = Grid::from_with_index_filtered(input, |character, x, y| {
+        match character {
+            '.' => Some(Letter::Dot),
+            '#' => Some(Letter::Hash),
+            '^' => {
+                starting_position = Some(Coord::new(x as i32, y as i32));
+                Some(Letter::Guard)
             }
-        }).collect::<Vec<Letter>>()
-    }).collect::<Vec<Vec<Letter>>>();
+            c => {
+                errors.push(format!("Found invalid character in input: {}", c));
+                None
+            }
+        }
+    });
 
     let (ordinary_visited, blockage_locations) = if let Some(starting_position) = starting_position {
-        let starting_dir = (0, -1);
+        let starting_dir = Coord::new(0, -1);
         let (_looped, ordinary_visited_set) = find_visited(&grid, starting_position, starting_dir);
         let mut ordinary_visited = ordinary_visited_set.into_iter().collect::<Vec<_>>();
         ordinary_visited.sort();
 
-        let mut blockage_locations = HashSet::new();
+        let mut blockage_locations: HashSet<Coord> = HashSet::new();
         for (blockage_index, blockage_location) in ordinary_visited.iter().enumerate() {
-            let blockage_location = blockage_location.clone();
-            if let Some(handle) = find_coord_mut(&mut grid, blockage_location) {
+            let blockage_location: Coord = blockage_location.clone();
+            if let Some(handle) = grid.get_mut(blockage_location) {
                 let original = handle.clone();
                 *handle = Letter::Hash;
 
@@ -55,7 +51,7 @@ pub fn puzzle(input: &str) -> DayOutput {
                     }
                 }
 
-                if let Some(handle) = find_coord_mut(&mut grid, blockage_location) {
+                if let Some(handle) = grid.get_mut(blockage_location) {
                     *handle = original;
                 } else {
                     errors.push(format!("Couldn't reset coord {:?}", blockage_location));
@@ -75,26 +71,25 @@ pub fn puzzle(input: &str) -> DayOutput {
     }
 }
 
-fn add_tab(tabs: &mut Vec<Tab>, grid: &Vec<Vec<Letter>>, visited: &HashSet<Coord>, title: String) {
-    let grid = grid.iter().enumerate().map(|(y, row)|{
-        row.iter().enumerate().map(|(x, letter)|{
-            let text = match letter {
-                Letter::Dot => {
-                    if visited.contains(&(x as i32, y as i32)) {
-                        "X"
-                    } else {
-                        "."
-                    }
-                },
-                Letter::Hash => "#",
-                Letter::Guard => "^",
-            };
-            GridCell {
-                text: text.to_string(),
-                class: Default::default(),
-            }
-        }).collect::<Vec<_>>()
-    }).collect::<Vec<_>>();
+fn add_tab(tabs: &mut Vec<Tab>, grid: &Grid<Letter>, visited: &HashSet<Coord>, title: String) {
+    let grid = grid.map_grid(|letter, x, y| {
+        let text = match letter {
+            Letter::Dot => {
+                let coord = Coord::new(x as i32, y as i32);
+                if visited.contains(&coord) {
+                    "X"
+                } else {
+                    "."
+                }
+            },
+            Letter::Hash => "#",
+            Letter::Guard => "^",
+        };
+        GridCell {
+            text: text.to_string(),
+            class: Default::default(),
+        }
+    });
     let tab = Tab {
         title,
         strings: vec![],
@@ -103,7 +98,7 @@ fn add_tab(tabs: &mut Vec<Tab>, grid: &Vec<Vec<Letter>>, visited: &HashSet<Coord
     tabs.push(tab);
 }
 
-fn find_visited(grid: &Vec<Vec<Letter>>, starting_position: Coord, starting_dir: Coord) -> (bool, HashSet<Coord>) {
+fn find_visited(grid: &Grid<Letter>, starting_position: Coord, starting_dir: Coord) -> (bool, HashSet<Coord>) {
     let mut visited_locations = HashSet::new();
     let mut visited_location_directions = HashSet::new();
     let mut current_position = starting_position.clone();
@@ -115,8 +110,8 @@ fn find_visited(grid: &Vec<Vec<Letter>>, starting_position: Coord, starting_dir:
         }
         visited_location_directions.insert(location_direction);
         visited_locations.insert(current_position);
-        let next_position = add_coord(current_position, current_dir);
-        let next_tile = find_coord(&grid, next_position);
+        let next_position = current_position.add(&current_dir);
+        let next_tile = grid.get(next_position);
         match next_tile {
             None => {
                 // We walked outside of bounds, we're done
@@ -129,7 +124,7 @@ fn find_visited(grid: &Vec<Vec<Letter>>, starting_position: Coord, starting_dir:
                         current_position = next_position;
                     }
                     Letter::Hash => {
-                        current_dir = (-current_dir.1, current_dir.0);
+                        current_dir = Coord::new(-current_dir.deref().1, current_dir.deref().0);
                     }
                 }
             }
@@ -138,28 +133,3 @@ fn find_visited(grid: &Vec<Vec<Letter>>, starting_position: Coord, starting_dir:
     (looped, visited_locations)
 }
 
-fn find_coord(grid: &Vec<Vec<Letter>>, coord: Coord) -> Option<Letter> {
-    let (x, y): (Option<usize>, Option<usize>) = (coord.0.try_into().ok(), coord.1.try_into().ok());
-    if let (Some(x), Some(y)) = (x, y) {
-        grid.get(y).map(|row| {
-            row.get(x).map(|letter| letter.clone())
-        }).unwrap_or(None)
-    } else {
-        None
-    }
-}
-
-fn add_coord(first: Coord, second: Coord) -> Coord {
-    (first.0 + second.0, first.1 + second.1)
-}
-
-fn find_coord_mut(grid: &mut Vec<Vec<Letter>>, coord: Coord) -> Option<&mut Letter> {
-    let (x, y): (Option<usize>, Option<usize>) = (coord.0.try_into().ok(), coord.1.try_into().ok());
-    if let (Some(x), Some(y)) = (x, y) {
-        grid.get_mut(y).map(|row| {
-            row.get_mut(x)
-        }).unwrap_or(None)
-    } else {
-        None
-    }
-}
