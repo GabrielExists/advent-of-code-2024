@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use crate::app::GridCell;
 
@@ -81,6 +81,14 @@ impl<T> Grid<T> {
         }).collect()
     }
 
+    pub fn get_all_coords(&self) -> Vec<Coord> {
+        self.0.iter().enumerate().map(|(y, row)| {
+            row.iter().enumerate().map(move |(x, _)| {
+                Coord::new(x as i32, y as i32)
+            })
+        }).flatten().collect::<Vec<_>>()
+    }
+
     pub fn get(&self, coord: Coord) -> Option<&T> {
         if let Some((x, y)) = coord.into_usize() {
             self.0.get(y).map(|row| {
@@ -142,6 +150,14 @@ impl Coord {
             None
         }
     }
+    pub fn get_orthagonal_dirs() -> Vec<Coord> {
+        vec![
+            Coord::new(0, 1),
+            Coord::new(1, 0),
+            Coord::new(0, -1),
+            Coord::new(-1, 0),
+        ]
+    }
 }
 
 impl Deref for Coord {
@@ -149,5 +165,11 @@ impl Deref for Coord {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+impl Display for Coord {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("({}, {})", self.deref().0, self.deref().1))
+
     }
 }
