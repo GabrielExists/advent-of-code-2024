@@ -12,6 +12,7 @@ mod day8;
 mod grid;
 mod day9;
 mod day10;
+mod day11;
 
 #[cfg(target_arch = "wasm32")]
 use app::App;
