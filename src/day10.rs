@@ -1,14 +1,13 @@
-use std::collections::{HashMap, HashSet};
-use js_sys::Math::exp;
+use std::collections::HashSet;
 use crate::app::{DayOutput, Diagnostic, Tab};
 use crate::grid::{Coord, Grid};
 
 pub fn puzzle(input: &str) -> DayOutput {
-    let input_grid = Grid::from_with_index_filtered(input, |character, x, y| {
+    let input_grid = Grid::from_with_index_filtered(input, |character, _x, _y| {
         character.to_digit(10)
     });
 
-    let mut grid = input_grid.clone();
+    let grid = input_grid.clone();
     let mut sum = 0;
     let mut sum_rating = 0;
     let mut tuples = Vec::new();

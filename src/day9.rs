@@ -11,7 +11,7 @@ pub fn puzzle(input: &str) -> DayOutput {
             Some(num) => format!("{}", num),
         }
     }
-    let (initial_disk_spaces, disk_spaces, errors) = puzzle_silver(input);
+    let (initial_disk_spaces, disk_spaces, _errors) = puzzle_silver(input);
     grid.add_row_from(&initial_disk_spaces, cell_function);
     grid.add_row_from(&disk_spaces, cell_function);
     let silver_checksum = calculate_checksum(&disk_spaces);

@@ -16,7 +16,7 @@ impl<T> Grid<T> {
         Self(Vec::new())
     }
 
-    pub fn from<F>(input: &str, mut cell_function: F) -> Self
+    pub fn _from<F>(input: &str, mut cell_function: F) -> Self
         where F: FnMut(char) -> T {
         let grid = input.split("\n").map(|row| {
             row.chars().map(|character| {
