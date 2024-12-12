@@ -3,7 +3,7 @@ use crate::app::{DayOutput, Diagnostic, Tab};
 use crate::grid::{Coord, Grid};
 
 pub fn puzzle(input: &str) -> DayOutput {
-    let input_grid = Grid::from_with_index_filtered(input, |character, _x, _y| {
+    let input_grid = Grid::from_filtered(input, |character| {
         character.to_digit(10)
     });
 

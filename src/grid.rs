@@ -9,17 +9,27 @@ pub struct Grid<T> (Vec<Vec<T>>);
 impl<T> Grid<T> {}
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Hash, Clone, Copy, Debug)]
-pub struct Coord((i32, i32));
+pub struct Coord(pub (i32, i32));
 
 impl<T> Grid<T> {
     pub fn new() -> Self {
         Self(Vec::new())
     }
 
-    pub fn _from<F>(input: &str, mut cell_function: F) -> Self
+    pub fn from<F>(input: &str, mut cell_function: F) -> Self
         where F: FnMut(char) -> T {
         let grid = input.split("\n").map(|row| {
             row.chars().map(|character| {
+                cell_function(character)
+            }).collect::<Vec<T>>()
+        }).filter(|a| !a.is_empty()).collect::<Vec<Vec<T>>>();
+        Grid(grid)
+    }
+
+    pub fn from_filtered<F>(input: &str, mut cell_function: F) -> Self
+        where F: FnMut(char) -> Option<T> {
+        let grid = input.split("\n").map(|row| {
+            row.chars().filter_map(|character| {
                 cell_function(character)
             }).collect::<Vec<T>>()
         }).filter(|a| !a.is_empty()).collect::<Vec<Vec<T>>>();
