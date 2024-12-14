@@ -1,5 +1,6 @@
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
+use yew::Classes;
 use crate::app::GridCell;
 
 
@@ -96,6 +97,18 @@ impl<T> Grid<T> {
                 GridCell {
                     text: cell.to_string(),
                     class: Default::default(),
+                }
+            }).collect()
+        }).collect()
+    }
+    pub fn to_tab_grid_class<F>(self, class_function: F) -> Vec<Vec<GridCell>>
+        where T: Display, F: Fn(&T) -> Classes {
+        self.0.into_iter().map(|row| {
+            row.into_iter().map(|cell| {
+                let class = class_function(&cell);
+                GridCell {
+                    text: cell.to_string(),
+                    class,
                 }
             }).collect()
         }).collect()

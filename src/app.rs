@@ -34,6 +34,8 @@ pub enum AppMessage {
     SetDay(usize),
     Run,
     TabClicked(usize),
+    TabPrevious,
+    TabNext,
 }
 
 const LOCAL_STORAGE_INPUT: &'static str = "INPUT";
@@ -211,6 +213,16 @@ impl Component for App {
                 self.tab_index = index;
                 true
             }
+            AppMessage::TabPrevious => {
+                if self.tab_index > 0 {
+                    self.tab_index -= 1;
+                }
+                true
+            }
+            AppMessage::TabNext => {
+                self.tab_index += 1;
+                true
+            }
         }
     }
 
@@ -288,7 +300,13 @@ impl Component for App {
                 <div>
                     <button onclick={
                         let index = self.tab_index;
-                        ctx.link().callback(move |_| AppMessage::TabClicked(index + 1))
+                        ctx.link().callback(move |_| AppMessage::TabPrevious)
+                    } class="p-1 m-1 border border-gray-400 rounded-md">
+                        {"Previous tab"}
+                    </button>
+                    <button onclick={
+                        let index = self.tab_index;
+                        ctx.link().callback(move |_| AppMessage::TabNext)
                     } class="p-1 m-1 border border-gray-400 rounded-md">
                         {"Next tab"}
                     </button>
@@ -297,6 +315,7 @@ impl Component for App {
                 {if let Some(tab) = self.diagnostic.tabs.get(self.tab_index) {
                     html! {
                         <>
+                        <div class="mb-2 border-b border-gray-400">{"Tab name: "}{&tab.title}</div>
                     {for tab.strings.iter().map(|string|{
                         html!{
                             <div>
