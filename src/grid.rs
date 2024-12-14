@@ -16,6 +16,16 @@ impl<T> Grid<T> {
         Self(Vec::new())
     }
 
+    pub fn new_repeat(x: usize, y: usize, item: T) -> Self
+        where T: Clone {
+        let grid = (0..y).map(|_ |{
+            (0..x).map(|_ |{
+                item.clone()
+            }).collect()
+        }).collect();
+        Grid(grid)
+    }
+
     pub fn from<F>(input: &str, mut cell_function: F) -> Self
         where F: FnMut(char) -> T {
         let grid = input.split("\n").map(|row| {
@@ -177,9 +187,9 @@ impl Deref for Coord {
         &self.0
     }
 }
+
 impl Display for Coord {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("({}, {})", self.deref().0, self.deref().1))
-
     }
 }
