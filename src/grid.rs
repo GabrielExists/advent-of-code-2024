@@ -1,4 +1,4 @@
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::ops::Deref;
 use yew::Classes;
 use crate::app::GridCell;
@@ -7,7 +7,6 @@ use crate::app::GridCell;
 #[derive(Clone, Debug)]
 pub struct Grid<T> (Vec<Vec<T>>);
 
-impl<T> Grid<T> {}
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Hash, Clone, Copy, Debug)]
 pub struct Coord(pub (i32, i32));
@@ -19,8 +18,8 @@ impl<T> Grid<T> {
 
     pub fn new_repeat(x: usize, y: usize, item: T) -> Self
         where T: Clone {
-        let grid = (0..y).map(|_ |{
-            (0..x).map(|_ |{
+        let grid = (0..y).map(|_| {
+            (0..x).map(|_| {
                 item.clone()
             }).collect()
         }).collect();
@@ -76,6 +75,29 @@ impl<T> Grid<T> {
         self.0.push(new_row);
     }
 
+    pub(crate) fn find<F>(&self, predicate: F) -> Option<Coord>
+        where F: Fn(&T) -> bool {
+        self.0.iter().enumerate().fold(None, |output, (y, row)| {
+            match output {
+                Some(x) => Some(x),
+                None => {
+                    row.iter().enumerate().fold(None, |output, (x, tile)| {
+                        match output {
+                            Some(x) => Some(x),
+                            None => {
+                                if predicate(tile) {
+                                    Some(Coord::new(x as i32, y as i32))
+                                } else {
+                                    None
+                                }
+                            }
+                        }
+                    })
+                },
+            }
+        })
+    }
+
     pub fn count<F>(&self, predicate: F) -> usize
         where F: Fn(&T) -> bool {
         self.0.iter().fold(0, |acc, row| {
@@ -90,10 +112,26 @@ impl<T> Grid<T> {
         })
     }
 
-    pub fn to_tab_grid(self) -> Vec<Vec<GridCell>>
+    pub(crate) fn swap(&mut self, first: Coord, second: Coord) -> bool
+        where T: Clone {
+        if let Some(first_contents) = self.get(first) {
+            let first_contents = first_contents.clone();
+            if let Some(handle_second) = self.get_mut(second) {
+                let second_contents = handle_second.clone();
+                *handle_second = first_contents;
+                if let Some(handle_first) = self.get_mut(first) {
+                    *handle_first = second_contents;
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    pub fn to_tab_grid(&self) -> Vec<Vec<GridCell>>
         where T: Display {
-        self.0.into_iter().map(|row| {
-            row.into_iter().map(|cell| {
+        self.0.iter().map(|row| {
+            row.iter().map(|cell| {
                 GridCell {
                     text: cell.to_string(),
                     class: Default::default(),

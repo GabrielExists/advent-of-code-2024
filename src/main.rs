@@ -1,6 +1,7 @@
 extern crate core;
 
 mod app;
+mod common;
 mod day1;
 mod day2;
 mod day3;
@@ -16,6 +17,7 @@ mod day11;
 mod day12;
 mod day13;
 mod day14;
+mod day15;
 
 #[cfg(target_arch = "wasm32")]
 use app::App;

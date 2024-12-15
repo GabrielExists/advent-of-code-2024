@@ -1,9 +1,8 @@
-use std::collections::HashSet;
 use std::ops::Deref;
-use std::str::FromStr;
-use regex::{Captures, Regex};
+use regex::Regex;
 use yew::classes;
 use crate::app::{class_string, DayOutput, Diagnostic, Tab};
+use crate::common::capture_parse;
 use crate::grid::{Coord, Grid};
 
 
@@ -17,10 +16,6 @@ struct Robot {
     py: i32,
     vx: i32,
     vy: i32,
-}
-
-pub fn capture_parse<F: FromStr>(captures: &Captures, name: &str) -> Option<F> {
-    captures.name(name).map(|s| s.as_str().parse::<F>().ok()).unwrap_or(None)
 }
 
 pub fn puzzle(input: &str) -> DayOutput {
@@ -46,7 +41,7 @@ pub fn puzzle(input: &str) -> DayOutput {
     let mut tabs = vec![];
 
     let silver_grid = apply_movement(&robots, SECONDS, &mut errors);
-    let mut silver = calculate_safety_score(&silver_grid);
+    let silver = calculate_safety_score(&silver_grid);
     // By manually searching, we find that there is a vertical constellation at 68, 169, 270
     // As well as a horizontal constellation at 136, 239, 342.
     // These are constant spacings of 101 and 103.
@@ -61,7 +56,6 @@ pub fn puzzle(input: &str) -> DayOutput {
         let grid = apply_movement(&robots, seconds, &mut errors);
         add_tab(&mut tabs, seconds, grid);
     }
-    let mut gold = 0;
 
     // let mut used_coords = HashSet::new();
     // let mut diagnostic_strings = Vec::new();
@@ -124,7 +118,7 @@ fn calculate_safety_score(grid: &Grid<u64>) -> u64 {
     let mut quadrants = [0, 0, 0, 0];
     for coord in grid.get_all_coords() {
         if let Some(num_robots) = grid.get(coord) {
-            let quadrant = if coord.deref().0 * 2 + 1 < GRID_WIDTH {
+            if coord.deref().0 * 2 + 1 < GRID_WIDTH {
                 if coord.deref().1 * 2 + 1 < GRID_HEIGHT {
                     quadrants[0] += *num_robots;
                 } else if coord.deref().1 * 2 + 1 > GRID_HEIGHT {
@@ -136,7 +130,7 @@ fn calculate_safety_score(grid: &Grid<u64>) -> u64 {
                 } else if coord.deref().1 * 2 + 1 > GRID_HEIGHT {
                     quadrants[3] += *num_robots;
                 }
-            };
+            }
         }
     }
     quadrants.into_iter().product()

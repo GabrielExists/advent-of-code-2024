@@ -58,6 +58,7 @@ fn get_days() -> Vec<Day> {
     days.push(add_day(day12::puzzle, &mut index));
     days.push(add_day(day13::puzzle, &mut index));
     days.push(add_day(day14::puzzle, &mut index));
+    days.push(add_day(day15::puzzle, &mut index));
     days
 }
 
@@ -299,13 +300,11 @@ impl Component for App {
                 </div>
                 <div>
                     <button onclick={
-                        let index = self.tab_index;
                         ctx.link().callback(move |_| AppMessage::TabPrevious)
                     } class="p-1 m-1 border border-gray-400 rounded-md">
                         {"Previous tab"}
                     </button>
                     <button onclick={
-                        let index = self.tab_index;
                         ctx.link().callback(move |_| AppMessage::TabNext)
                     } class="p-1 m-1 border border-gray-400 rounded-md">
                         {"Next tab"}
