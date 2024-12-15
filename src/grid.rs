@@ -46,6 +46,16 @@ impl<T> Grid<T> {
         Grid(grid)
     }
 
+    pub fn from_filtered_flatten<F>(input: &str, mut cell_function: F) -> Self
+        where F: FnMut(char) -> Option<Vec<T>> {
+        let grid = input.split("\n").map(|row| {
+            row.chars().filter_map(|character| {
+                cell_function(character)
+            }).flatten().collect::<Vec<T>>()
+        }).filter(|a| !a.is_empty()).collect::<Vec<Vec<T>>>();
+        Grid(grid)
+    }
+
     pub fn from_with_index<F>(input: &str, mut cell_function: F) -> Self
         where F: FnMut(char, i32, i32) -> T {
         let grid = input.split("\n").enumerate().map(|(y, row)| {
