@@ -19,6 +19,7 @@ pub struct DayOutput {
     pub gold_output: String,
     pub diagnostic: Diagnostic,
 }
+
 pub type DayFunction = fn(&str) -> DayOutput;
 
 #[derive(Clone, Debug)]
@@ -66,7 +67,8 @@ fn get_days() -> Vec<Day> {
 
 fn add_day(function: DayFunction, index: &mut usize) -> Day {
     let this_index = *index;
-    *index += 1; Day {
+    *index += 1;
+    Day {
         text: format!("Day {}", this_index + 1),
         puzzle: function,
         index: this_index,
@@ -85,6 +87,7 @@ pub struct Tab {
     pub strings: Vec<String>,
     pub grid: Vec<Vec<GridCell>>,
 }
+
 #[derive(Clone, Debug)]
 pub struct GridCell {
     // pub icon: IconId,
@@ -138,7 +141,7 @@ impl App {
     }
 }
 
-pub fn class_string(text: &'static str) -> Classes{
+pub fn class_string(text: &'static str) -> Classes {
     let mut split = text.split(" ");
     if let Some(first) = split.next() {
         split.into_iter().fold(classes!(first), |mut class, substring| {

@@ -192,6 +192,20 @@ impl<T> Grid<T> {
         }).collect()
     }
 
+    pub fn to_tab_grid_title_class<F>(self, title_function: F) -> Vec<Vec<GridCell>>
+        where T: Display, F: Fn(&T, usize, usize) -> (String, Classes) {
+        self.0.into_iter().enumerate().map(|(y, row)| {
+            row.into_iter().enumerate().map(|(x, cell)| {
+                let (title, class) = title_function(&cell, x, y);
+                GridCell {
+                    text: cell.to_string(),
+                    class,
+                    title,
+                }
+            }).collect()
+        }).collect()
+    }
+
     pub fn get_all_coords(&self) -> Vec<Coord> {
         self.0.iter().enumerate().map(|(y, row)| {
             row.iter().enumerate().map(move |(x, _)| {
