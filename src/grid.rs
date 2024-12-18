@@ -1,4 +1,5 @@
 use std::fmt::{Debug, Display, Formatter};
+use std::iter::zip;
 use std::ops::Deref;
 use yew::Classes;
 use crate::app::GridCell;
@@ -6,7 +7,6 @@ use crate::app::GridCell;
 
 #[derive(Clone, Debug)]
 pub struct Grid<T> (Vec<Vec<T>>);
-
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Hash, Clone, Copy, Debug)]
 pub struct Coord(pub (i32, i32));
@@ -103,7 +103,7 @@ impl<T> Grid<T> {
                             }
                         }
                     })
-                },
+                }
             }
         })
     }
@@ -137,6 +137,20 @@ impl<T> Grid<T> {
         }
         false
     }
+    pub(crate) fn append(&mut self, grid: Grid<T>) {
+        self.0.extend(grid.0.into_iter());
+    }
+
+    pub(crate) fn mush<F>(&mut self, grid: &Grid<T>, merge_func: F)
+        where F: Fn(&mut T, &T), T: Debug {
+        log::info!("A {:?}", self);
+        log::info!("B {:?}", grid);
+        let _ = zip(self.0.iter_mut(), grid.0.iter()).map(|(self_row, grid_row)| {
+            let _ = zip(self_row.iter_mut(), grid_row.iter()).map(|(self_item, other_item)| {
+                merge_func(self_item, other_item);
+            }).count();
+        }).count();
+    }
 
     pub fn to_tab_grid(&self) -> Vec<Vec<GridCell>>
         where T: Display {
@@ -144,7 +158,8 @@ impl<T> Grid<T> {
             row.iter().map(|cell| {
                 GridCell {
                     text: cell.to_string(),
-                    class: Default::default(),
+                    class: Classes::new(),
+                    title: "".to_string(),
                 }
             }).collect()
         }).collect()
@@ -157,6 +172,21 @@ impl<T> Grid<T> {
                 GridCell {
                     text: cell.to_string(),
                     class,
+                    title: "".to_string(),
+                }
+            }).collect()
+        }).collect()
+    }
+
+    pub fn to_tab_grid_title<F>(self, title_function: F) -> Vec<Vec<GridCell>>
+        where T: Display, F: Fn(&T) -> String {
+        self.0.into_iter().map(|row| {
+            row.into_iter().map(|cell| {
+                let title = title_function(&cell);
+                GridCell {
+                    text: cell.to_string(),
+                    class: Classes::new(),
+                    title,
                 }
             }).collect()
         }).collect()
@@ -231,12 +261,19 @@ impl Coord {
             None
         }
     }
-    pub fn get_orthagonal_dirs() -> Vec<Coord> {
+    pub fn rotate_left(self) -> Self {
+        Self((self.0.1, -self.0.0))
+    }
+    pub fn rotate_right(self) -> Self {
+        Self((-self.0.1, self.0.0))
+    }
+
+    pub fn get_orthagonal_dirs() -> Vec<Self> {
         vec![
-            Coord::new(0, 1),
-            Coord::new(1, 0),
-            Coord::new(0, -1),
-            Coord::new(-1, 0),
+            Self::new(0, 1),
+            Self::new(1, 0),
+            Self::new(0, -1),
+            Self::new(-1, 0),
         ]
     }
 }

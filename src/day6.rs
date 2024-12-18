@@ -88,6 +88,7 @@ fn add_tab(tabs: &mut Vec<Tab>, grid: &Grid<Letter>, visited: &HashSet<Coord>, t
         GridCell {
             text: text.to_string(),
             class: Default::default(),
+            title: String::new(),
         }
     });
     let tab = Tab {

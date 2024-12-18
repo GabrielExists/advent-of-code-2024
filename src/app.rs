@@ -36,6 +36,7 @@ pub enum AppMessage {
     TabClicked(usize),
     TabPrevious,
     TabNext,
+    TabLast,
 }
 
 const LOCAL_STORAGE_INPUT: &'static str = "INPUT";
@@ -59,6 +60,7 @@ fn get_days() -> Vec<Day> {
     days.push(add_day(day13::puzzle, &mut index));
     days.push(add_day(day14::puzzle, &mut index));
     days.push(add_day(day15::puzzle, &mut index));
+    days.push(add_day(day16::puzzle, &mut index));
     days
 }
 
@@ -88,6 +90,7 @@ pub struct GridCell {
     // pub icon: IconId,
     pub text: String,
     pub class: Classes,
+    pub title: String,
 }
 
 impl Diagnostic {
@@ -224,6 +227,10 @@ impl Component for App {
                 self.tab_index += 1;
                 true
             }
+            AppMessage::TabLast => {
+                self.tab_index = self.diagnostic.tabs.len() - 1;
+                true
+            }
         }
     }
 
@@ -309,6 +316,11 @@ impl Component for App {
                     } class="p-1 m-1 border border-gray-400 rounded-md">
                         {"Next tab"}
                     </button>
+                    <button onclick={
+                        ctx.link().callback(move |_| AppMessage::TabLast)
+                    } class="p-1 m-1 border border-gray-400 rounded-md">
+                        {"Last tab"}
+                    </button>
                 </div>
                 <div class="p-4 flex flex-col border border-gray-400">
                 {if let Some(tab) = self.diagnostic.tabs.get(self.tab_index) {
@@ -328,7 +340,7 @@ impl Component for App {
                         {for row.iter().map(|cell|{
                             html! {
                                 // <Icon icon_id={cell.icon} width={"2em".to_string()} height={"2em".to_string()} />
-                                <div class={merge("w-4 h-4", &cell.class)}>
+                                <div class={merge("w-4 h-4", &cell.class)} title={cell.title.clone()}>
                                     {&cell.text}
                                 </div>
                             }
