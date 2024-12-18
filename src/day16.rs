@@ -127,20 +127,50 @@ pub fn puzzle(input: &str) -> DayOutput {
     }
 }
 
-fn follow_path(map: &CandidateMap, end_key: Key) -> HashSet<Coord> {
-    let mut remaining_tiles = HashSet::from([end_key]);
-    let mut path_tiles = HashSet::new();
-    while !remaining_tiles.is_empty() {
-        if let Some(next_key) = remaining_tiles.iter().next() {
-            let next_key = next_key.clone();
-            remaining_tiles.take(&next_key);
-            path_tiles.insert(next_key.0);
-            if let Some((_cost, came_from)) = map.get(&next_key) {
-                remaining_tiles.extend(came_from.iter());
-            }
+fn create_frontier(grid: &Grid<Tile>, start: Coord) -> CandidateMap {
+    let start_tile = grid.get(start);
+    if let Some(Tile::Empty) = start_tile {
+        HashMap::from_iter([((start, Coord::new(1, 0)), (0, HashSet::new()))].into_iter())
+    } else {
+        HashMap::new()
+    }
+}
+
+
+fn add_to_candidate_map(map: &mut CandidateMap, key: (Coord, Coord), new_data: TileData) {
+    match map.entry(key) {
+        Entry::Occupied(mut occupied) => {
+            combine_tile_data(occupied.get_mut(), &new_data);
+        }
+        Entry::Vacant(vacant) => {
+            vacant.insert(new_data);
         }
     }
-    path_tiles
+}
+
+// Returns true if first was used
+fn combine_tile_data(first: &mut TileData, second: &TileData) {
+    let (first_cost, first_came_from) = first;
+    let (second_cost, second_came_from) = second;
+    if *second_cost < *first_cost {
+        *first_came_from = second_came_from.clone();
+        *first_cost = *second_cost;
+    } else if *second_cost == *first_cost {
+        first_came_from.extend(second_came_from.iter());
+    }
+}
+
+fn combine_tile(first: VisitedTile, second: VisitedTile) -> VisitedTile {
+    let ((first_cost, mut first_came_from), first_direction) = first;
+    let ((second_cost, second_came_from), second_direction) = second;
+    if second_cost < first_cost {
+        ((second_cost, second_came_from), second_direction)
+    } else if second_cost == first_cost {
+        first_came_from.extend(second_came_from.iter());
+        ((first_cost, first_came_from), Direction::Split)
+    } else {
+        ((first_cost, first_came_from), first_direction)
+    }
 }
 
 fn get_end_tile(explored: &mut CandidateMap, end: Coord) -> Option<(Key, u64)> {
@@ -163,17 +193,26 @@ fn get_end_tile(explored: &mut CandidateMap, end: Coord) -> Option<(Key, u64)> {
     output
 }
 
-fn add_to_candidate_map(map: &mut CandidateMap, key: (Coord, Coord), new_data: TileData) {
-    match map.entry(key) {
-        Entry::Occupied(mut occupied) => {
-            combine_tile_data(occupied.get_mut(), &new_data);
-        }
-        Entry::Vacant(vacant) => {
-            vacant.insert(new_data);
+fn follow_path(map: &CandidateMap, end_key: Key) -> HashSet<Coord> {
+    let mut remaining_tiles = HashSet::from([end_key]);
+    let mut path_tiles = HashSet::new();
+    while !remaining_tiles.is_empty() {
+        if let Some(next_key) = remaining_tiles.iter().next() {
+            let next_key = next_key.clone();
+            remaining_tiles.take(&next_key);
+            path_tiles.insert(next_key.0);
+            if let Some((_cost, came_from)) = map.get(&next_key) {
+                remaining_tiles.extend(came_from.iter());
+            }
         }
     }
+    path_tiles
 }
 
+
+//////////////////////////////////
+// Visualization code
+//////////////////////////////////
 fn add_tab(input_grid: &Grid<Tile>, tabs: &mut Vec<Tab>, frontier: &CandidateMap, explored: &CandidateMap, title: String, source: Coord, dir: Coord) {
     let mut grids = HashMap::new();
     for dir in Coord::get_orthagonal_dirs() {
@@ -266,14 +305,6 @@ fn add_tab_gold(input_grid: &Grid<Tile>, tabs: &mut Vec<Tab>, path_tiles: &HashS
     });
 }
 
-fn create_frontier(grid: &Grid<Tile>, start: Coord) -> CandidateMap {
-    let start_tile = grid.get(start);
-    if let Some(Tile::Empty) = start_tile {
-        HashMap::from_iter([((start, Coord::new(1, 0)), (0, HashSet::new()))].into_iter())
-    } else {
-        HashMap::new()
-    }
-}
 
 
 impl Display for Tile {
@@ -296,29 +327,3 @@ impl Display for Tile {
         }
     }
 }
-
-// Returns true if first was used
-fn combine_tile_data(first: &mut TileData, second: &TileData) {
-    let (first_cost, first_came_from) = first;
-    let (second_cost, second_came_from) = second;
-    if *second_cost < *first_cost {
-        *first_came_from = second_came_from.clone();
-        *first_cost = *second_cost;
-    } else if *second_cost == *first_cost {
-        first_came_from.extend(second_came_from.iter());
-    }
-}
-
-fn combine_tile(first: VisitedTile, second: VisitedTile) -> VisitedTile {
-    let ((first_cost, mut first_came_from), first_direction) = first;
-    let ((second_cost, second_came_from), second_direction) = second;
-    if second_cost < first_cost {
-        ((second_cost, second_came_from), second_direction)
-    } else if second_cost == first_cost {
-        first_came_from.extend(second_came_from.iter());
-        ((first_cost, first_came_from), Direction::Split)
-    } else {
-        ((first_cost, first_came_from), first_direction)
-    }
-}
-
