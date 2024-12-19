@@ -70,7 +70,9 @@ pub fn puzzle(input: &str) -> DayOutput {
             errors.push(format!("{:?}", subprograms));
             match gold_find_next(&program, input_state.clone(), &subprograms, 0, &mut diagnostic_gold) {
                 Ok(successes) => {
-                    errors.push(format!("Gold solutions: {:?}", successes));
+                    let mut sorted_successes = successes.iter().collect::<Vec<_>>();
+                    sorted_successes.sort();
+                    errors.push(format!("Gold solutions: {:?}", sorted_successes));
                     output_gold = successes.into_iter().min();
                 }
                 Err(longest_failure) => {
