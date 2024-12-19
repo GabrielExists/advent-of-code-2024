@@ -1,5 +1,7 @@
+use std::collections::HashMap;
+use std::mem::offset_of;
 use regex::Regex;
-use crate::app::{DayOutput, Diagnostic};
+use crate::app::{DayOutput, Diagnostic, Tab};
 use crate::common::capture_parse;
 
 #[derive(PartialEq, Clone, Debug)]
@@ -39,6 +41,9 @@ pub fn puzzle(input: &str) -> DayOutput {
     let re = Regex::new(r"Register A: (?P<a>\d+)\nRegister B: (?P<b>\d+)\nRegister C: (?P<c>\d+)\n\nProgram: (?P<program>\d(,\d)*)").unwrap();
     let mut output_silver: Option<Vec<u8>> = None;
     let mut output_gold = None;
+    let mut diagnostic_gold = Vec::new();
+    let mut diagnostic_gold_filtered = Vec::new();
+    let mut diagnostic_stepped = Vec::new();
     if let Some(captures) = re.captures(input) {
         let a = capture_parse(&captures, "a");
         let b = capture_parse(&captures, "b");
@@ -59,20 +64,44 @@ pub fn puzzle(input: &str) -> DayOutput {
             let silver_state = run_program(&program, input_state.clone(), 1000);
             output_silver = Some(silver_state.output.clone());
 
-            for i in 0..30000 {
+            for i in 0..200000 {
                 let mut current_state = input_state.clone();
                 current_state.a = i as u64;
                 let output_state = run_program(&program, current_state, 1000);
-                log::info!("{:?}, {:?}, {:?}", program, i, output_state);
+                diagnostic_gold.push((format!("{:05}",i), output_state.clone()));
                 if output_state.output == program {
                     output_gold = Some(i);
                     break;
                 }
             }
+            diagnostic_stepped = run_program_step(&program, input_state.clone(), 1000);
+            diagnostic_gold_filtered.extend(diagnostic_gold.iter().filter(|(_a_value, list)| {
+                std::iter::zip(list.output.iter(), program.iter()).all(|(a, b)| *a == *b)
+            }).map(|a|a.clone()));
         }
     }
-    let tabs = Vec::new();
+    let mut tabs = Vec::new();
     let errors: Vec<String> = Vec::new();
+    let mut buckets = HashMap::new();
+    for (_i, list) in diagnostic_gold.iter() {
+        let bucket = buckets.entry(list.output.len()).or_insert(0);
+        *bucket += 1;
+    }
+    tabs.push(Tab {
+        title: "Stepped".to_string(),
+        strings: diagnostic_stepped.into_iter().map(|a| format!("{:?}", a)).collect(),
+        grid: vec![],
+    });
+    tabs.push(Tab {
+        title: "Progression".to_string(),
+        strings: diagnostic_gold.into_iter().take(3000).map(|a| format!("{:?}", a)).collect(),
+        grid: vec![],
+    });
+    tabs.push(Tab {
+        title: "Progression filtered".to_string(),
+        strings: diagnostic_gold_filtered.into_iter().map(|a| format!("{:?}", a)).collect(),
+        grid: vec![],
+    });
 
     let formatted_output = output_silver.map(|list| list.into_iter().map(|number| number.to_string()).collect::<Vec<_>>().join(","));
     DayOutput {
@@ -100,6 +129,149 @@ fn run_program(instructions: &[u8], mut state: State, max_commands: usize) -> St
         num_commands += 1;
     }
 }
+
+fn run_program_step(instructions: &[u8], mut state: State, max_commands: usize) -> Vec<(Instruction, State)> {
+    let mut num_commands = 0;
+    let mut states = Vec::new();
+    loop {
+        if num_commands > max_commands {
+            break;
+        }
+        if let (Some(opcode), Some(operand)) = (instructions.get(state.instruction), instructions.get(state.instruction + 1)) {
+            if let Some(inst) = decode_instruction(*opcode, *operand) {
+                state = apply_instruction(inst.clone(), state);
+                states.push((inst, state.clone()));
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+        num_commands += 1;
+    };
+    states
+}
+
+// (BST(A), State { instruction: 2, a: 2203, b: 3, c: 0, output: [] })     // b = a % 8
+// (BXL(5), State { instruction: 4, a: 2203, b: 6, c: 0, output: [] })     // b = b xor 5
+// (CDV(B), State { instruction: 6, a: 2203, b: 6, c: 34, output: [] })    // c = a / 2**b
+// (ADV(Three), State { instruction: 8, a: 275, b: 6, c: 34, output: [] }) // a = a / 8
+// (BXC, State { instruction: 10, a: 275, b: 36, c: 34, output: [] })      // b = b xor c
+// (BXL(6), State { instruction: 12, a: 275, b: 34, c: 34, output: [] })   // b = b xor 6
+// (OUT(B), State { instruction: 14, a: 275, b: 34, c: 34, output: [2] })  // output = b % 8
+// (JNZ(0), State { instruction: 0, a: 275, b: 34, c: 34, output: [2] })   // repeat
+
+// (OUT(B), State { instruction: 14, a: 275, b: 34, c: 34, output: [2] })
+// (BXL(6), State { instruction: 12, a: 275, b: 34, c: 34, output: [] })   // b = output + n * 8
+// (BXC, State { instruction: 10, a: 275, b: 36, c: 34, output: [] })      // b = b xor 6
+// (ADV(Three), State { instruction: 8, a: 275, b: 6, c: 34, output: [] }) // b = b xor c
+// (CDV(B), State { instruction: 6, a: 2203, b: 6, c: 34, output: [] })    // a = a * 8 + m
+// (BXL(5), State { instruction: 4, a: 2203, b: 6, c: 0, output: [] })     // c = a / 2**b
+// (BST(A), State { instruction: 2, a: 2203, b: 3, c: 0, output: [] })     // b = b xor 5
+// (INIT, State { instruction: 0, a: 2203, b: 0, c: 0, output: [] })       // b = a % 8
+
+
+// (JNZ(0), State { instruction: 0, a: 4, b: 1, c: 0, output: [2, 4, 1] })
+// (BST(A), State { instruction: 2, a: 4, b: 4, c: 0, output: [2, 4, 1] })     // b = a % 8
+// (BXL(5), State { instruction: 4, a: 4, b: 1, c: 0, output: [2, 4, 1] })     // b = b xor 5
+// (CDV(B), State { instruction: 6, a: 4, b: 1, c: 2, output: [2, 4, 1] })     // c = a / 2**b
+// (ADV(Three), State { instruction: 8, a: 0, b: 1, c: 2, output: [2, 4, 1] }) // a = a / 8
+// (BXC, State { instruction: 10, a: 0, b: 3, c: 2, output: [2, 4, 1] })       // b = b xor c
+// (BXL(6), State { instruction: 12, a: 0, b: 5, c: 2, output: [2, 4, 1] })    // b = b xor 6
+// (OUT(B), State { instruction: 14, a: 0, b: 5, c: 2, output: [2, 4, 1, 5] }) // output = b % 8
+// (JNZ(0), State { instruction: 16, a: 0, b: 5, c: 2, output: [2, 4, 1, 5] })
+
+// Reverse
+// (JNZ(0), State { instruction: 16, a: 0, b: 5, c: 2, output: [2, 4, 1, 5] })
+// (OUT(B), State { instruction: 14, a: 0, b: 5, c: 2, output: [2, 4, 1, 5] })
+// (BXL(6), State { instruction: 12, a: 0, b: 5, c: 2, output: [2, 4, 1] })    // b = output + n * 8
+// (BXC, State { instruction: 10, a: 0, b: 3, c: 2, output: [2, 4, 1] })       // b = b xor 6
+// (ADV(Three), State { instruction: 8, a: 0, b: 1, c: 2, output: [2, 4, 1] }) // b = b xor c
+// (CDV(B), State { instruction: 6, a: 4, b: 1, c: 2, output: [2, 4, 1] })     // a = a * 8 + m
+// (BXL(5), State { instruction: 4, a: 4, b: 1, c: 0, output: [2, 4, 1] })     // c = a * 2**b + m
+// (BST(A), State { instruction: 2, a: 4, b: 4, c: 0, output: [2, 4, 1] })     // b = b xor 5
+// (JNZ(0), State { instruction: 0, a: 4, b: 1, c: 0, output: [2, 4, 1] })     // b = a * 8 + m
+
+// 2,4,1,5,7,5,0,3,4,1,1,6,5,5,3,0
+// 2,1,7,0,4,1,5,3
+
+
+
+// (BST(A), State { instruction: 2, a: 47719761, b: 1, c: 0, output: [] })
+// (BXL(5), State { instruction: 4, a: 47719761, b: 4, c: 0, output: [] })
+// (CDV(B), State { instruction: 6, a: 47719761, b: 4, c: 2982485, output: [] })
+// (ADV(Three), State { instruction: 8, a: 5964970, b: 4, c: 2982485, output: [] })
+// (BXC, State { instruction: 10, a: 5964970, b: 2982481, c: 2982485, output: [] })
+// (BXL(6), State { instruction: 12, a: 5964970, b: 2982487, c: 2982485, output: [] })
+// (OUT(B), State { instruction: 14, a: 5964970, b: 2982487, c: 2982485, output: [7] })
+// (JNZ(0), State { instruction: 0, a: 5964970, b: 2982487, c: 2982485, output: [7] })
+// (BST(A), State { instruction: 2, a: 5964970, b: 2, c: 2982485, output: [7] })
+// (BXL(5), State { instruction: 4, a: 5964970, b: 7, c: 2982485, output: [7] })
+// (CDV(B), State { instruction: 6, a: 5964970, b: 7, c: 46601, output: [7] })
+// (ADV(Three), State { instruction: 8, a: 745621, b: 7, c: 46601, output: [7] })
+// (BXC, State { instruction: 10, a: 745621, b: 46606, c: 46601, output: [7] })
+// (BXL(6), State { instruction: 12, a: 745621, b: 46600, c: 46601, output: [7] })
+// (OUT(B), State { instruction: 14, a: 745621, b: 46600, c: 46601, output: [7, 0] })
+// (JNZ(0), State { instruction: 0, a: 745621, b: 46600, c: 46601, output: [7, 0] })
+// (BST(A), State { instruction: 2, a: 745621, b: 5, c: 46601, output: [7, 0] })
+// (BXL(5), State { instruction: 4, a: 745621, b: 0, c: 46601, output: [7, 0] })
+// (CDV(B), State { instruction: 6, a: 745621, b: 0, c: 745621, output: [7, 0] })
+// (ADV(Three), State { instruction: 8, a: 93202, b: 0, c: 745621, output: [7, 0] })
+// (BXC, State { instruction: 10, a: 93202, b: 745621, c: 745621, output: [7, 0] })
+// (BXL(6), State { instruction: 12, a: 93202, b: 745619, c: 745621, output: [7, 0] })
+// (OUT(B), State { instruction: 14, a: 93202, b: 745619, c: 745621, output: [7, 0, 3] })
+// (JNZ(0), State { instruction: 0, a: 93202, b: 745619, c: 745621, output: [7, 0, 3] })
+// (BST(A), State { instruction: 2, a: 93202, b: 2, c: 745621, output: [7, 0, 3] })
+// (BXL(5), State { instruction: 4, a: 93202, b: 7, c: 745621, output: [7, 0, 3] })
+// (CDV(B), State { instruction: 6, a: 93202, b: 7, c: 728, output: [7, 0, 3] })
+// (ADV(Three), State { instruction: 8, a: 11650, b: 7, c: 728, output: [7, 0, 3] })
+// (BXC, State { instruction: 10, a: 11650, b: 735, c: 728, output: [7, 0, 3] })
+// (BXL(6), State { instruction: 12, a: 11650, b: 729, c: 728, output: [7, 0, 3] })
+// (OUT(B), State { instruction: 14, a: 11650, b: 729, c: 728, output: [7, 0, 3, 1] })
+// (JNZ(0), State { instruction: 0, a: 11650, b: 729, c: 728, output: [7, 0, 3, 1] })
+// (BST(A), State { instruction: 2, a: 11650, b: 2, c: 728, output: [7, 0, 3, 1] })
+// (BXL(5), State { instruction: 4, a: 11650, b: 7, c: 728, output: [7, 0, 3, 1] })
+// (CDV(B), State { instruction: 6, a: 11650, b: 7, c: 91, output: [7, 0, 3, 1] })
+// (ADV(Three), State { instruction: 8, a: 1456, b: 7, c: 91, output: [7, 0, 3, 1] })
+// (BXC, State { instruction: 10, a: 1456, b: 92, c: 91, output: [7, 0, 3, 1] })
+// (BXL(6), State { instruction: 12, a: 1456, b: 90, c: 91, output: [7, 0, 3, 1] })
+// (OUT(B), State { instruction: 14, a: 1456, b: 90, c: 91, output: [7, 0, 3, 1, 2] })
+// ----
+// (JNZ(0), State { instruction: 0, a: 1456, b: 90, c: 91, output: [7, 0, 3, 1, 2] })
+// (BST(A), State { instruction: 2, a: 1456, b: 0, c: 91, output: [7, 0, 3, 1, 2] })
+// (BXL(5), State { instruction: 4, a: 1456, b: 5, c: 91, output: [7, 0, 3, 1, 2] })
+// (CDV(B), State { instruction: 6, a: 1456, b: 5, c: 45, output: [7, 0, 3, 1, 2] })
+// (ADV(Three), State { instruction: 8, a: 182, b: 5, c: 45, output: [7, 0, 3, 1, 2] })
+// (BXC, State { instruction: 10, a: 182, b: 40, c: 45, output: [7, 0, 3, 1, 2] })
+// (BXL(6), State { instruction: 12, a: 182, b: 46, c: 45, output: [7, 0, 3, 1, 2] })
+// (OUT(B), State { instruction: 14, a: 182, b: 46, c: 45, output: [7, 0, 3, 1, 2, 6] })
+// (JNZ(0), State { instruction: 0, a: 182, b: 46, c: 45, output: [7, 0, 3, 1, 2, 6] })
+// (BST(A), State { instruction: 2, a: 182, b: 6, c: 45, output: [7, 0, 3, 1, 2, 6] }) // b = a % 8
+// (BXL(5), State { instruction: 4, a: 182, b: 3, c: 45, output: [7, 0, 3, 1, 2, 6] }) // b = b xor 5
+// (CDV(B), State { instruction: 6, a: 182, b: 3, c: 22, output: [7, 0, 3, 1, 2, 6] }) // c = a / 2**b
+// (ADV(Three), State { instruction: 8, a: 22, b: 3, c: 22, output: [7, 0, 3, 1, 2, 6] }) // a = a / 8
+// (BXC, State { instruction: 10, a: 22, b: 21, c: 22, output: [7, 0, 3, 1, 2, 6] }) // b = b xor c
+// (BXL(6), State { instruction: 12, a: 22, b: 19, c: 22, output: [7, 0, 3, 1, 2, 6] }) // b = b xor 6
+// (OUT(B), State { instruction: 14, a: 22, b: 19, c: 22, output: [7, 0, 3, 1, 2, 6, 3] }) // output = b % 8
+// (JNZ(0), State { instruction: 0, a: 22, b: 19, c: 22, output: [7, 0, 3, 1, 2, 6, 3] })
+
+// --
+// (BST(A), State { instruction: 2, a: 22, b: 6, c: 22, output: [7, 0, 3, 1, 2, 6, 3] })
+// (BXL(5), State { instruction: 4, a: 22, b: 3, c: 22, output: [7, 0, 3, 1, 2, 6, 3] })
+// (CDV(B), State { instruction: 6, a: 22, b: 3, c: 2, output: [7, 0, 3, 1, 2, 6, 3] })
+// (ADV(Three), State { instruction: 8, a: 2, b: 3, c: 2, output: [7, 0, 3, 1, 2, 6, 3] })
+// (BXC, State { instruction: 10, a: 2, b: 1, c: 2, output: [7, 0, 3, 1, 2, 6, 3] })
+// (BXL(6), State { instruction: 12, a: 2, b: 7, c: 2, output: [7, 0, 3, 1, 2, 6, 3] })
+// (OUT(B), State { instruction: 14, a: 2, b: 7, c: 2, output: [7, 0, 3, 1, 2, 6, 3, 7] })
+// (JNZ(0), State { instruction: 0, a: 2, b: 7, c: 2, output: [7, 0, 3, 1, 2, 6, 3, 7] })
+// (BST(A), State { instruction: 2, a: 2, b: 2, c: 2, output: [7, 0, 3, 1, 2, 6, 3, 7] })
+// (BXL(5), State { instruction: 4, a: 2, b: 7, c: 2, output: [7, 0, 3, 1, 2, 6, 3, 7] })
+// (CDV(B), State { instruction: 6, a: 2, b: 7, c: 0, output: [7, 0, 3, 1, 2, 6, 3, 7] })
+// (ADV(Three), State { instruction: 8, a: 0, b: 7, c: 0, output: [7, 0, 3, 1, 2, 6, 3, 7] })
+// (BXC, State { instruction: 10, a: 0, b: 7, c: 0, output: [7, 0, 3, 1, 2, 6, 3, 7] })
+// (BXL(6), State { instruction: 12, a: 0, b: 1, c: 0, output: [7, 0, 3, 1, 2, 6, 3, 7] })
+// (OUT(B), State { instruction: 14, a: 0, b: 1, c: 0, output: [7, 0, 3, 1, 2, 6, 3, 7, 1] })
+// (JNZ(0), State { instruction: 16, a: 0, b: 1, c: 0, output: [7, 0, 3, 1, 2, 6, 3, 7, 1] })
 
 fn decode_instruction(opcode: u8, operand: u8) -> Option<Instruction> {
     match opcode {
