@@ -1,5 +1,4 @@
 use std::collections::{HashMap, HashSet};
-use std::mem::offset_of;
 use regex::Regex;
 use crate::app::{DayOutput, Diagnostic, Tab};
 use crate::common::capture_parse;

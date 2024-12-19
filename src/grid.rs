@@ -178,7 +178,7 @@ impl<T> Grid<T> {
         }).collect()
     }
 
-    pub fn to_tab_grid_title<F>(self, title_function: F) -> Vec<Vec<GridCell>>
+    pub fn _to_tab_grid_title<F>(self, title_function: F) -> Vec<Vec<GridCell>>
         where T: Display, F: Fn(&T) -> String {
         self.0.into_iter().map(|row| {
             row.into_iter().map(|cell| {
