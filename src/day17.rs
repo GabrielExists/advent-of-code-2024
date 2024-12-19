@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::mem::offset_of;
 use regex::Regex;
 use crate::app::{DayOutput, Diagnostic, Tab};
@@ -39,16 +39,16 @@ struct State {
 
 pub fn puzzle(input: &str) -> DayOutput {
     let re = Regex::new(r"Register A: (?P<a>\d+)\nRegister B: (?P<b>\d+)\nRegister C: (?P<c>\d+)\n\nProgram: (?P<program>\d(,\d)*)").unwrap();
+    let mut errors = Vec::new();
     let mut output_silver: Option<Vec<u8>> = None;
     let mut output_gold = None;
     let mut diagnostic_gold = Vec::new();
-    let mut diagnostic_gold_filtered = Vec::new();
     let mut diagnostic_stepped = Vec::new();
     if let Some(captures) = re.captures(input) {
         let a = capture_parse(&captures, "a");
         let b = capture_parse(&captures, "b");
         let c = capture_parse(&captures, "c");
-        let program: Option<Vec<u8>> = captures.name("program").map(|m|{
+        let program: Option<Vec<u8>> = captures.name("program").map(|m| {
             m.as_str().split(",").filter_map(|item| {
                 item.parse::<u8>().ok()
             }).collect::<Vec<u8>>()
@@ -64,24 +64,25 @@ pub fn puzzle(input: &str) -> DayOutput {
             let silver_state = run_program(&program, input_state.clone(), 1000);
             output_silver = Some(silver_state.output.clone());
 
-            for i in 0..200000 {
-                let mut current_state = input_state.clone();
-                current_state.a = i as u64;
-                let output_state = run_program(&program, current_state, 1000);
-                diagnostic_gold.push((format!("{:05}",i), output_state.clone()));
-                if output_state.output == program {
-                    output_gold = Some(i);
-                    break;
+            let mut subprograms = Vec::new();
+            for i in (0..(program.len())).rev() {
+                subprograms.push(program[i..].to_vec());
+            }
+            errors.push(format!("{:?}", subprograms));
+            match gold_find_next(&program, input_state.clone(), &subprograms, 0, &mut diagnostic_gold) {
+                Ok(successes) => {
+                    errors.push(format!("Gold solutions: {:?}", successes));
+                    output_gold = successes.into_iter().min();
+                }
+                Err(longest_failure) => {
+                    errors.push(format!("Couldn't find subprogram {:?}", longest_failure));
                 }
             }
+
             diagnostic_stepped = run_program_step(&program, input_state.clone(), 1000);
-            diagnostic_gold_filtered.extend(diagnostic_gold.iter().filter(|(_a_value, list)| {
-                std::iter::zip(list.output.iter(), program.iter()).all(|(a, b)| *a == *b)
-            }).map(|a|a.clone()));
         }
     }
     let mut tabs = Vec::new();
-    let errors: Vec<String> = Vec::new();
     let mut buckets = HashMap::new();
     for (_i, list) in diagnostic_gold.iter() {
         let bucket = buckets.entry(list.output.len()).or_insert(0);
@@ -97,17 +98,60 @@ pub fn puzzle(input: &str) -> DayOutput {
         strings: diagnostic_gold.into_iter().take(3000).map(|a| format!("{:?}", a)).collect(),
         grid: vec![],
     });
-    tabs.push(Tab {
-        title: "Progression filtered".to_string(),
-        strings: diagnostic_gold_filtered.into_iter().map(|a| format!("{:?}", a)).collect(),
-        grid: vec![],
-    });
 
     let formatted_output = output_silver.map(|list| list.into_iter().map(|number| number.to_string()).collect::<Vec<_>>().join(","));
     DayOutput {
         silver_output: format!("{}", formatted_output.unwrap_or(String::new())),
-        gold_output: format!("{}", output_gold.unwrap_or(0)),
+        gold_output: format!("{}", output_gold.map(|set| format!("{:?}", set)).unwrap_or(String::new())),
         diagnostic: Diagnostic::with_tabs(tabs, format!("{:?}", errors)),
+    }
+}
+
+fn gold_find_next(program: &[u8], input_state: State, remaining_subprograms: &[Vec<u8>], a: u64, attempts: &mut Vec<(u64, State)>) -> Result<HashSet<u64>, Vec<u8>> {
+    match remaining_subprograms.split_first() {
+        None => {
+            Ok(HashSet::from_iter([a]))
+        }
+        Some((subprogram, remaining_subprograms)) => {
+            let first_attempt = a * 8;
+            let last_attempt = first_attempt + 7;
+            let mut successes: HashSet<u64> = HashSet::new();
+            let mut longest_failure: Option<Vec<u8>> = None;
+            for attempted_a in first_attempt..=last_attempt {
+                let state = State {
+                    a: attempted_a,
+                    ..input_state.clone()
+                };
+                let output_state = run_program(&program, state, 1000);
+                attempts.push((a, output_state.clone()));
+                if output_state.output == *subprogram {
+                    match gold_find_next(program, input_state.clone(), remaining_subprograms, attempted_a, attempts) {
+                        Ok(success) => {
+                            successes.extend(success.into_iter());
+                        }
+                        Err(failure) => {
+                            match &longest_failure {
+                                None => {}
+                                Some(current_longest) => {
+                                    if failure.len() > current_longest.len() {
+                                        longest_failure = Some(failure);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if !successes.is_empty() {
+                Ok(successes)
+            } else {
+                if let Some(longest_failure) = longest_failure {
+                    Err(longest_failure)
+                } else {
+                    Err(subprogram.clone())
+                }
+            }
+        }
     }
 }
 
@@ -194,7 +238,6 @@ fn run_program_step(instructions: &[u8], mut state: State, max_commands: usize) 
 
 // 2,4,1,5,7,5,0,3,4,1,1,6,5,5,3,0
 // 2,1,7,0,4,1,5,3
-
 
 
 // (BST(A), State { instruction: 2, a: 47719761, b: 1, c: 0, output: [] })
@@ -295,7 +338,7 @@ fn decode_instruction(opcode: u8, operand: u8) -> Option<Instruction> {
         5 => {
             if let Some(combo) = Combo::from_operand(operand) {
                 Some(Instruction::OUT(combo))
-        } else {
+            } else {
                 None
             }
         }
@@ -402,6 +445,7 @@ mod tests {
             output: vec![],
         })
     }
+
     #[test]
     fn simple_1() {
         let inst = decode_instruction(2, 6).unwrap();
@@ -420,6 +464,7 @@ mod tests {
             output: vec![],
         })
     }
+
     #[test]
     fn simple_2() {
         let state = run_program(&[5, 0, 5, 1, 5, 4], State {
@@ -437,6 +482,7 @@ mod tests {
             output: vec![0, 1, 2],
         })
     }
+
     #[test]
     fn simple_3() {
         let state = run_program(&[0, 1, 5, 4, 3, 0], State {
@@ -445,7 +491,7 @@ mod tests {
             b: 0,
             c: 0,
             output: vec![],
-        },1000);
+        }, 1000);
         assert_eq!(state, State {
             instruction: 6,
             a: 0,
@@ -463,7 +509,7 @@ mod tests {
             b: 29,
             c: 0,
             output: vec![],
-        },1000);
+        }, 1000);
         assert_eq!(state, State {
             instruction: 2,
             a: 0,
@@ -481,7 +527,7 @@ mod tests {
             b: 2024,
             c: 43690,
             output: vec![],
-        },1000);
+        }, 1000);
         assert_eq!(state, State {
             instruction: 2,
             a: 0,
