@@ -1,16 +1,14 @@
-use std::borrow::BorrowMut;
-use std::fmt::{Display, Formatter};
-use log::__private_api::loc;
-use slab_tree::{NodeId, NodeMut, NodeRef, Tree, TreeBuilder};
+use std::collections::HashMap;
 use crate::app::{DayOutput, Diagnostic, Tab};
+use indextree::{Arena, NodeId};
 
-struct TreePrinter<'a> {
-    tree: &'a Tree<char>,
-}
-#[derive(Clone, Debug)]
-struct Output {
-    slices: Vec<String>,
-}
+// struct TreePrinter<'a> {
+//     tree: &'a Tree<char>,
+// }
+// #[derive(Clone, Debug)]
+// struct Output {
+//     slices: Vec<String>,
+// }
 
 pub fn puzzle(input: &str) -> DayOutput {
     let mut split = input.split("\n\n");
@@ -24,28 +22,30 @@ pub fn puzzle(input: &str) -> DayOutput {
 
     let mut errors: Vec<String> = Vec::new();
     let mut tabs = vec![];
-    let mut tree = TreeBuilder::new().with_root('.').build();
+    let mut arena = Arena::new();
+    let root_id = arena.new_node('-');
     for pattern in patterns.iter() {
-        add_string(&mut tree, pattern);
+        add_string(&mut arena, root_id, pattern);
     }
 
+    let mut memo = HashMap::new();
     // let mut options = Vec::new();
     let results = designs.iter().map(|design| {
         // let outputs = traverse(&tree, *design, &mut options, Vec::new());
-        let outputs = traverse(&tree, *design);
+        let outputs = traverse(&arena, root_id, *design, &mut memo);
         (design, outputs)
     }).collect::<Vec<_>>();
     // let num_passing = results.iter().filter(|(_, outputs)| !outputs.is_empty()).count();
     let num_passing = results.iter().filter(|(_, passes)| *passes).count();
 
 
-    let tree_view = format!("{}", TreePrinter { tree: &tree }).replace(" ", ".");
+    // let tree_view = format!("{}", TreePrinter { tree: &tree }).replace(" ", ".");
 
-    tabs.push(Tab {
-        title: "Tree view".to_string(),
-        strings: tree_view.split("\n").into_iter().map(|item| item.to_string()).collect(),
-        grid: vec![],
-    });
+    // tabs.push(Tab {
+    //     title: "Tree view".to_string(),
+    //     strings: tree_view.split("\n").into_iter().map(|item| item.to_string()).collect(),
+    //     grid: vec![],
+    // });
     tabs.push(Tab {
         title: "Patterns".to_string(),
         strings: patterns.into_iter().map(|pattern| pattern.to_string()).collect(),
@@ -68,122 +68,109 @@ pub fn puzzle(input: &str) -> DayOutput {
     }
 }
 
-fn traverse_enumerate(tree: &Tree<char>, haystack: &str, mut accumulated_slices: Vec<String>) -> Vec<Output> {
-    match get_slices(tree, haystack) {
-        None => {
-            vec![]
-        }
-        Some(slices) => {
-            let mut outputs = Vec::new();
-            for slice in slices {
-                let local_accumulated_slices = accumulated_slices.clone().into_iter().chain([haystack[..slice].to_string()]).collect();
-                if slice == haystack.len() {
-                    // options.push(format!("Completed"));
-                    return vec![Output {
-                        slices: accumulated_slices,
-                    }]
-                }
-                // options.push(format!("Slicing {} from {}, {} remains", &haystack[..slice], haystack, &haystack[slice..]));
-                let new_outputs = traverse_enumerate(tree, &haystack[slice..], local_accumulated_slices);
-                if !new_outputs.is_empty() {
-                    outputs.extend(new_outputs.into_iter());
-                }
-            }
-            outputs
-        }
+// fn traverse_enumerate(tree: &Tree<char>, haystack: &str, mut accumulated_slices: Vec<String>) -> Vec<Output> {
+//     match get_slices(tree, root, haystack) {
+//         None => {
+//             vec![]
+//         }
+//         Some(slices) => {
+//             let mut outputs = Vec::new();
+//             for slice in slices {
+//                 let local_accumulated_slices = accumulated_slices.clone().into_iter().chain([haystack[..slice].to_string()]).collect();
+//                 if slice == haystack.len() {
+//                     // options.push(format!("Completed"));
+//                     return vec![Output {
+//                         slices: accumulated_slices,
+//                     }]
+//                 }
+//                 // options.push(format!("Slicing {} from {}, {} remains", &haystack[..slice], haystack, &haystack[slice..]));
+//                 let new_outputs = traverse_enumerate(tree, &haystack[slice..], local_accumulated_slices);
+//                 if !new_outputs.is_empty() {
+//                     outputs.extend(new_outputs.into_iter());
+//                 }
+//             }
+//             outputs
+//         }
+//     }
+// }
+fn traverse<'a>(arena: &Arena<char>, root_id: NodeId, haystack: &'a str, memo: &mut HashMap<&'a str, bool>) -> bool {
+    if let Some(output) = memo.get(haystack) {
+        return *output;
     }
-}
-fn traverse(tree: &Tree<char>, haystack: &str) -> bool {
-    match get_slices(tree, haystack) {
+    let output = match get_slices(arena, root_id, haystack) {
         None => {
             false
         }
         Some(slices) => {
-            for slice in slices {
-                // let local_accumulated_slices = accumulated_slices.clone().into_iter().chain([haystack[..slice].to_string()]).collect();
-                if slice == haystack.len() {
-                    return true
+            'block: loop {
+                for slice in slices {
+                    // let local_accumulated_slices = accumulated_slices.clone().into_iter().chain([haystack[..slice].to_string()]).collect();
+                    if slice == haystack.len() {
+                        break 'block true;
+                    }
+                    // options.push(format!("Slicing {} from {}, {} remains", &haystack[..slice], haystack, &haystack[slice..]));
+                    let passed = traverse(arena, root_id, &haystack[slice..], memo);
+                    if passed {
+                        break 'block true;
+                    }
                 }
-                // options.push(format!("Slicing {} from {}, {} remains", &haystack[..slice], haystack, &haystack[slice..]));
-                let passed = traverse(tree, &haystack[slice..]);
-                if passed {
-                    return true;
-                }
+                break 'block false;
             }
-            false
         }
-    }
+    };
+    memo.insert(haystack, output);
+    output
 }
 
-fn get_slices(tree: &Tree<char>, haystack: &str) -> Option<Vec<usize>> {
-    // options.push(format!("getting slices for {}", haystack));
-    let mut node_id = tree.root_id();
+fn get_slices(arena: &Arena<char>, root: NodeId, haystack: &str) -> Option<Vec<usize>> {
+    let mut node_id = Some(root);
     let mut slices = Vec::new();
     let mut index = 0;
     let mut iter = haystack.chars();
     while node_id.is_some() {
         let haystack_char = iter.next();
-        let node = tree.get(node_id?)?;
+        let children = node_id?.children(arena);
         node_id = None;
-        for child in node.children() {
-            let node_char = *child.data();
-            if node_char == '.' {
+        for child_id in children {
+            let node_char = arena.get(child_id)?.get();
+            if *node_char == '.' {
                 slices.push(index);
             } else if let Some(haystack_char) = haystack_char {
-                if haystack_char == node_char {
-                    node_id = Some(child.node_id())
+                if haystack_char == *node_char {
+                    node_id = Some(child_id);
                 }
             }
         }
         index += 1;
     }
-    //rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr
-    // options.push(format!("slices: {:?}", slices));
     return Some(slices);
 }
 
-fn add_string(tree: &mut Tree<char>, string: &str) -> Option<NodeId> {
-    let mut node_id = tree.root_id();
-    for character in string.chars() {
-        node_id = get_or_insert_child(tree, node_id, character);
+fn add_string(arena: &mut Arena<char>, root: NodeId, string: &str) -> NodeId {
+    let mut node_id = root;
+    for current_char in string.chars() {
+        node_id = get_or_insert_child(arena, node_id, current_char);
     }
-    node_id = get_or_insert_child(tree, node_id, '.');
+    node_id = get_or_insert_child(arena, node_id, '.');
     node_id
 }
 
-fn get_or_insert_child<'a>(tree: &mut Tree<char>, parent_id: Option<NodeId>, child_character: char) -> Option<NodeId> {
-    let parent = tree.get(parent_id?)?;
-    match parent.first_child().map(|node_ref| node_ref.node_id()) {
-        None => {
-            append_child(tree, parent.node_id(), child_character)
-        }
-        Some(mut child_id) => {
-            loop {
-                let child = tree.get(child_id)?;
-                if *child.data() == child_character {
-                    break Some(child.node_id());
-                } else {
-                    match child.next_sibling() {
-                        None => {
-                            break append_child(tree, parent.node_id(), child_character);
-                        }
-                        Some(sibling) => {
-                            child_id = sibling.node_id();
-                        }
-                    }
-                }
+fn get_or_insert_child<'a>(arena: &mut Arena<char>, parent_id: NodeId, new_char: char) -> NodeId {
+    for child_id in parent_id.children(arena) {
+        if let Some(child) = arena.get(child_id) {
+            if *child.get() == new_char {
+                return child_id;
             }
         }
     }
+    let new_node = arena.new_node(new_char);
+    parent_id.append(new_node, arena);
+    new_node
 }
 
-fn append_child(tree: &mut Tree<char>, parent_id: NodeId, child_character: char) -> Option<NodeId> {
-    let mut node_mut = tree.get_mut(parent_id)?;
-    Some(node_mut.append(child_character).node_id())
-}
 
-impl Display for TreePrinter<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.tree.write_formatted(f)
-    }
-}
+// impl Display for TreePrinter<'_> {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+//         self.tree.write_formatted(f)
+//     }
+// }
