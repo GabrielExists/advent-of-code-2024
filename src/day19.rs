@@ -1,14 +1,12 @@
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 use crate::app::{DayOutput, Diagnostic, Tab};
-use indextree::{Arena, NodeId};
+use indextree::{Arena, NodeEdge, NodeId};
 
-// struct TreePrinter<'a> {
-//     tree: &'a Tree<char>,
-// }
-// #[derive(Clone, Debug)]
-// struct Output {
-//     slices: Vec<String>,
-// }
+struct ArenaPrinter<'a> {
+    arena: &'a Arena<char>,
+    root: NodeId,
+}
 
 pub fn puzzle(input: &str) -> DayOutput {
     let mut split = input.split("\n\n");
@@ -20,7 +18,7 @@ pub fn puzzle(input: &str) -> DayOutput {
         (Vec::new(), Vec::new())
     };
 
-    let mut errors: Vec<String> = Vec::new();
+    let errors: Vec<String> = Vec::new();
     let mut tabs = vec![];
     let mut arena = Arena::new();
     let root_id = arena.new_node('-');
@@ -29,33 +27,29 @@ pub fn puzzle(input: &str) -> DayOutput {
     }
 
     let mut memo = HashMap::new();
-    // let mut options = Vec::new();
     let results = designs.iter().map(|design| {
-        // let outputs = traverse(&tree, *design, &mut options, Vec::new());
-        let outputs = traverse(&arena, root_id, *design, &mut memo);
-        (design, outputs)
+        let possibilities = traverse(&arena, root_id, *design, &mut memo);
+        (design, possibilities)
     }).collect::<Vec<_>>();
-    // let num_passing = results.iter().filter(|(_, outputs)| !outputs.is_empty()).count();
-    let num_passing = results.iter().filter(|(_, passes)| *passes).count();
+    let num_passing = results.iter().filter(|(_, possibilities)| *possibilities > 0).count();
+    let combined_possibilities: u64 = results.iter().map(|(_, possibilities)| possibilities).sum();
 
 
-    // let tree_view = format!("{}", TreePrinter { tree: &tree }).replace(" ", ".");
+    let tree_view = format!("{}", ArenaPrinter {
+        arena: &arena,
+        root: root_id,
+    }).replace(" ", ".");
 
-    // tabs.push(Tab {
-    //     title: "Tree view".to_string(),
-    //     strings: tree_view.split("\n").into_iter().map(|item| item.to_string()).collect(),
-    //     grid: vec![],
-    // });
+    tabs.push(Tab {
+        title: "Tree view".to_string(),
+        strings: tree_view.split("\n").into_iter().map(|item| item.to_string()).collect(),
+        grid: vec![],
+    });
     tabs.push(Tab {
         title: "Patterns".to_string(),
         strings: patterns.into_iter().map(|pattern| pattern.to_string()).collect(),
         grid: vec![],
     });
-    // tabs.push(Tab {
-    //     title: "Options".to_string(),
-    //     strings: options.into_iter().map(|item| item.to_string()).collect(),
-    //     grid: vec![],
-    // });
     tabs.push(Tab {
         title: "Results".to_string(),
         strings: results.into_iter().map(|(design, passes)| format!("{design}: {passes:?}")).collect(),
@@ -63,63 +57,37 @@ pub fn puzzle(input: &str) -> DayOutput {
     });
     DayOutput {
         silver_output: format!("{}", num_passing),
-        gold_output: format!("{}", 0),
+        gold_output: format!("{}", combined_possibilities),
         diagnostic: Diagnostic::with_tabs(tabs, format!("{:?}", errors)),
     }
 }
 
-// fn traverse_enumerate(tree: &Tree<char>, haystack: &str, mut accumulated_slices: Vec<String>) -> Vec<Output> {
-//     match get_slices(tree, root, haystack) {
-//         None => {
-//             vec![]
-//         }
-//         Some(slices) => {
-//             let mut outputs = Vec::new();
-//             for slice in slices {
-//                 let local_accumulated_slices = accumulated_slices.clone().into_iter().chain([haystack[..slice].to_string()]).collect();
-//                 if slice == haystack.len() {
-//                     // options.push(format!("Completed"));
-//                     return vec![Output {
-//                         slices: accumulated_slices,
-//                     }]
-//                 }
-//                 // options.push(format!("Slicing {} from {}, {} remains", &haystack[..slice], haystack, &haystack[slice..]));
-//                 let new_outputs = traverse_enumerate(tree, &haystack[slice..], local_accumulated_slices);
-//                 if !new_outputs.is_empty() {
-//                     outputs.extend(new_outputs.into_iter());
-//                 }
-//             }
-//             outputs
-//         }
-//     }
-// }
-fn traverse<'a>(arena: &Arena<char>, root_id: NodeId, haystack: &'a str, memo: &mut HashMap<&'a str, bool>) -> bool {
+fn traverse<'a>(arena: &Arena<char>, root_id: NodeId, haystack: &'a str, memo: &mut HashMap<&'a str, u64>) -> u64 {
     if let Some(output) = memo.get(haystack) {
         return *output;
     }
-    let output = match get_slices(arena, root_id, haystack) {
+    let possibilities = match get_slices(arena, root_id, haystack) {
         None => {
-            false
+            0
         }
         Some(slices) => {
             'block: loop {
+                let mut accumulator = 0;
                 for slice in slices {
                     // let local_accumulated_slices = accumulated_slices.clone().into_iter().chain([haystack[..slice].to_string()]).collect();
                     if slice == haystack.len() {
-                        break 'block true;
+                        accumulator += 1;
                     }
                     // options.push(format!("Slicing {} from {}, {} remains", &haystack[..slice], haystack, &haystack[slice..]));
-                    let passed = traverse(arena, root_id, &haystack[slice..], memo);
-                    if passed {
-                        break 'block true;
-                    }
+                    let possibilities = traverse(arena, root_id, &haystack[slice..], memo);
+                    accumulator += possibilities;
                 }
-                break 'block false;
+                break 'block accumulator;
             }
         }
     };
-    memo.insert(haystack, output);
-    output
+    memo.insert(haystack, possibilities);
+    possibilities
 }
 
 fn get_slices(arena: &Arena<char>, root: NodeId, haystack: &str) -> Option<Vec<usize>> {
@@ -169,8 +137,28 @@ fn get_or_insert_child<'a>(arena: &mut Arena<char>, parent_id: NodeId, new_char:
 }
 
 
-// impl Display for TreePrinter<'_> {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-//         self.tree.write_formatted(f)
-//     }
-// }
+impl Display for ArenaPrinter<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut depth: i32 = 0;
+        for edge in self.root.traverse(self.arena) {
+            match edge {
+                NodeEdge::Start(start) => {
+                    if let Some(node) = self.arena.get(start) {
+                        let character = *node.get();
+                        if character == '.' {
+                            f.write_str("*")?;
+                        } else {
+                            let padding = ".".repeat(std::cmp::max(depth - 1, 0) as usize);
+                            f.write_fmt(format_args!("\n{}{}", padding, character))?;
+                        }
+                    }
+                    depth += 1;
+                }
+                NodeEdge::End(_end) => {
+                    depth -= 1;
+                }
+            }
+        }
+        Ok(())
+    }
+}
