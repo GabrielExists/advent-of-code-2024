@@ -37,7 +37,7 @@ pub fn puzzle(input: &str) -> DayOutput {
     });
 
     let mut tabs = vec![];
-    let mut errors: Vec<String> = vec![];
+    let errors: Vec<String> = vec![];
     let mut silver = 0;
     let mut gold = 0;
     tabs.push(Tab {
@@ -46,7 +46,7 @@ pub fn puzzle(input: &str) -> DayOutput {
         grid: input_grid.to_tab_grid(),
     });
     if let (Some(start), Some(end)) = (start, end) {
-        let explored = pathfind(&input_grid, &mut tabs, start, end);
+        let explored = pathfind(&input_grid, &mut tabs, start);
         let path_tiles = follow_path(&explored, end, true);
         let default_total_steps = (path_tiles.len() - 1) as u64;
         add_tab_path(&mut tabs, &input_grid, path_tiles, format!("Default"));
@@ -73,7 +73,7 @@ pub fn puzzle(input: &str) -> DayOutput {
         });
         let mut saved_to_num_silver = HashMap::new();
         for (_key, delta) in cheats_silver.iter() {
-            let mut num = saved_to_num_silver.entry(delta).or_insert(0);
+            let num = saved_to_num_silver.entry(delta).or_insert(0);
             *num += 1;
             if *delta >= LIMIT {
                 silver += 1;
@@ -89,7 +89,7 @@ pub fn puzzle(input: &str) -> DayOutput {
         });
         let mut saved_to_num_gold = HashMap::new();
         for (_key, delta) in cheats_gold.iter() {
-            let mut num = saved_to_num_gold.entry(delta).or_insert(0);
+            let num = saved_to_num_gold.entry(delta).or_insert(0);
             *num += 1;
             if *delta >= LIMIT {
                 gold += 1;
@@ -163,8 +163,8 @@ fn add_tab_path(tabs: &mut Vec<Tab>, grid: &Grid<Tile>, path_tiles: HashSet<Coor
     });
 }
 
-fn pathfind(input_grid: &Grid<Tile>, mut tabs: &mut Vec<Tab>, start: Coord, end: Coord) -> CandidateMap {
-    let mut grid = input_grid.clone();
+fn pathfind(input_grid: &Grid<Tile>, _tabs: &mut Vec<Tab>, start: Coord) -> CandidateMap {
+    let grid = input_grid.clone();
     let mut frontier: CandidateMap = create_frontier(&grid, start);
     let mut explored: CandidateMap = HashMap::new();
 
@@ -199,14 +199,6 @@ fn pathfind(input_grid: &Grid<Tile>, mut tabs: &mut Vec<Tab>, start: Coord, end:
     }
 
     explored
-    // if let Some((end_key, _cost)) = get_end_tile(&mut explored, end) {
-    //     let path_tiles: HashSet<Coord> = follow_path(&explored, end_key, true);
-    //     add_tab_visited(&grid, &mut tabs, &path_tiles, format!("Path"));
-    //     Ok(path_tiles.len() - 1)
-    // } else {
-    //     add_tab_visited(&grid, &mut tabs, &HashSet::new(), format!("Nope"));
-    //     Err(())
-    // }
 }
 
 fn create_frontier(grid: &Grid<Tile>, start: Coord) -> CandidateMap {
@@ -265,22 +257,6 @@ fn follow_path(map: &CandidateMap, end: Key, only_shortest: bool) -> HashSet<Coo
     }
 }
 
-fn add_tab_visited(input_grid: &Grid<Tile>, tabs: &mut Vec<Tab>, path_tiles: &HashSet<Coord>, title: String) {
-    let mut grid = input_grid.clone();
-    // Apply the path tiles
-    for pos in path_tiles.iter() {
-        if let Some(tile_handle) = grid.get_mut(*pos) {
-            *tile_handle = Tile::Path;
-        }
-    }
-    tabs.push(Tab {
-        title,
-        strings: vec![],
-        grid: grid.to_tab_grid(),
-    });
-}
-
-
 impl Display for Tile {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -291,15 +267,3 @@ impl Display for Tile {
     }
 }
 
-pub fn double_parse(first: Option<&str>, second: Option<&str>) -> Option<(usize, usize)> {
-    match (
-        first.map(|item| item.parse::<usize>()),
-        second.map(|item| item.parse::<usize>())
-    ) {
-        (
-            Some(Ok(first)),
-            Some(Ok(second))
-        ) => Some((first, second)),
-        _ => None,
-    }
-}
