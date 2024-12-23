@@ -39,7 +39,7 @@ pub fn puzzle(input: &str) -> DayOutput {
     });
     DayOutput {
         silver_output: format!("{}", outputs_silver.into_iter().sum::<u64>()),
-        gold_output: format!("{}", best_sequence.map(|(seq, price)| *price).unwrap_or(0)),
+        gold_output: format!("{}", best_sequence.map(|(_seq, price)| *price).unwrap_or(0)),
         diagnostic: Diagnostic::with_tabs(tabs, format!("{:?}", errors)),
     }
 }

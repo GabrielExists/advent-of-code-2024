@@ -6,7 +6,7 @@ use crate::app::GridCell;
 
 
 #[derive(Clone, Debug)]
-pub struct Grid<T> (Vec<Vec<T>>);
+pub struct Grid<T> (pub Vec<Vec<T>>);
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Hash, Clone, Copy, Debug)]
 pub struct Coord(pub (i32, i32));
@@ -233,8 +233,8 @@ impl<T> Grid<T> {
             None
         }
     }
-    pub(crate) fn map_grid<U, F>(&self, cell_function: F) -> Vec<Vec<U>>
-        where F: Fn(&T, usize, usize) -> U {
+    pub(crate) fn map_grid<U, F>(&self, mut cell_function: F) -> Vec<Vec<U>>
+        where F: FnMut(&T, usize, usize) -> U {
         self.0.iter().enumerate().map(|(y, row)| {
             row.iter().enumerate().map(|(x, cell)| {
                 cell_function(cell, x, y)
