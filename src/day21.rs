@@ -4,7 +4,7 @@ use crate::app::{DayOutput, Diagnostic, Tab};
 use crate::grid::{Coord, Grid};
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
-enum Action {
+pub enum Action {
     Up,
     Down,
     Left,
@@ -68,7 +68,7 @@ pub fn puzzle(input: &str) -> DayOutput {
     }
     tabs.push(Tab {
         title: "Outputs".to_string(),
-        strings: outputs.iter().map(|(actions, code, length)| format!("Length {}, Code {}", length, code)).collect(),
+        strings: outputs.iter().map(|(_actions, code, length)| format!("Length {}, Code {}", length, code)).collect(),
         grid: vec![],
     });
     tabs.push(Tab {
@@ -181,7 +181,7 @@ pub fn reverse_engineer<T>(grid: &Grid<T>, start_pos: Coord, sequence: &Vec<T>) 
     output_sequence
 }
 
-fn add_possibilities(sequences: Vec<Vec<Action>>, possibilities: Vec<Vec<Action>>) -> Vec<Vec<Action>> {
+fn _add_possibilities(sequences: Vec<Vec<Action>>, possibilities: Vec<Vec<Action>>) -> Vec<Vec<Action>> {
     let mut output_sequences = Vec::new();
     for possibility in possibilities.into_iter() {
         for sequence in sequences.iter() {
