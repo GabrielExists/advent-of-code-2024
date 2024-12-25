@@ -180,3 +180,15 @@ pub fn reverse_engineer<T>(grid: &Grid<T>, start_pos: Coord, sequence: &Vec<T>) 
     }
     output_sequence
 }
+
+fn add_possibilities(sequences: Vec<Vec<Action>>, possibilities: Vec<Vec<Action>>) -> Vec<Vec<Action>> {
+    let mut output_sequences = Vec::new();
+    for possibility in possibilities.into_iter() {
+        for sequence in sequences.iter() {
+            let mut sequence = sequence.clone();
+            sequence.extend(possibility.iter());
+            output_sequences.push(sequence);
+        }
+    }
+    output_sequences
+}
