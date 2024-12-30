@@ -21,14 +21,14 @@ enum NumpadKey {
 }
 
 pub fn puzzle(input: &str) -> DayOutput {
-    let errors: Vec<String> = Vec::new();
+    let mut errors: Vec<String> = Vec::new();
     let inputs = input.split("\n").into_iter().filter_map(|line| {
         let code = line.trim_matches('A').parse::<u64>().ok();
-        let line = line.chars().filter_map(|char|{
+        let line = line.chars().filter_map(|char| {
             match char {
                 'A' => Some(NumpadKey::A),
                 char => {
-                    char.to_digit(10).map(|dig|NumpadKey::Number(dig as u8))
+                    char.to_digit(10).map(|dig| NumpadKey::Number(dig as u8))
                 }
             }
         }).collect::<Vec<_>>();
@@ -56,15 +56,16 @@ pub fn puzzle(input: &str) -> DayOutput {
     let mut stepped_outputs = Vec::new();
     let mut silver = 0;
     for (input_row, code) in inputs {
-        let actions_one = reverse_engineer(&numpad_grid, numpad_start, &input_row);
-        stepped_outputs.push(format!("{:?}", actions_one));
-        let actions_two = reverse_engineer(&direction_grid, direction_start, &actions_one);
-        stepped_outputs.push(format!("{:?}", actions_two));
-        let actions_three = reverse_engineer(&direction_grid, direction_start, &actions_two);
-        stepped_outputs.push(format!("{:?}", actions_three));
-        let length = actions_three.len();
+        let actions_one = reverse_engineer(&numpad_grid, NumpadKey::Empty, numpad_start, &vec![input_row], &mut errors);
+        let actions_two = reverse_engineer(&direction_grid, Action::Empty, direction_start, &actions_one, &mut errors);
+        let actions_three = reverse_engineer(&direction_grid, Action::Empty, direction_start, &actions_two, &mut errors);
+        // stepped_outputs.push(format!("{:?}", actions_one));
+        // stepped_outputs.push(format!("{:?}", actions_two));
+        let shortest = actions_three.into_iter().min_by_key(|sequence| sequence.len()).unwrap_or(Vec::new());
+        stepped_outputs.push(format!("{:?}", shortest));
+        let length = shortest.len();
         silver += code * length as u64;
-        outputs.push((actions_three, code, length));
+        outputs.push((shortest, code, length));
     }
     tabs.push(Tab {
         title: "Outputs".to_string(),
@@ -81,8 +82,109 @@ pub fn puzzle(input: &str) -> DayOutput {
         gold_output: format!("{}", 0),
         diagnostic: Diagnostic::with_tabs(tabs, format!("{:?}", errors)),
     }
-
 }
+
+pub fn reverse_engineer<T>(grid: &Grid<T>, blank: T, start_pos: Coord, sequences: &Vec<Vec<T>>, errors: &mut Vec<String>) -> Vec<Vec<Action>>
+    where T: Eq + Hash + Clone {
+    let mut coordinate_lookup: HashMap<T, Coord> = HashMap::new();
+    let _ = grid.map_grid(|cell, x, y| {
+        coordinate_lookup.entry(cell.clone()).or_insert(Coord((x as i32, y as i32)));
+    });
+    let mut all_output_sequences = Vec::new();
+    let mut current_pos = start_pos;
+    for sequence in sequences.iter() {
+        let mut output_sequences = vec![vec![]];
+        for item in sequence.iter() {
+            if let Some(new_pos) = coordinate_lookup.get(item) {
+                let delta = new_pos.subtract(&current_pos);
+                let Coord((delta_x, delta_y)) = delta;
+                let mut vertical = vec![];
+                let mut horizontal = vec![];
+                if delta_y > 0 {
+                    for _ in 0..delta_y {
+                        vertical.push(Action::Down);
+                    }
+                }
+                if delta_y < 0 {
+                    for _ in 0..-delta_y {
+                        vertical.push(Action::Up);
+                    }
+                }
+                if delta_x > 0 {
+                    for _ in 0..delta_x {
+                        horizontal.push(Action::Right);
+                    }
+                }
+                if delta_x < 0 {
+                    for _ in 0..-delta_x {
+                        horizontal.push(Action::Left);
+                    }
+                }
+                if !vertical.is_empty() && !horizontal.is_empty() {
+                    let order_one = horizontal.clone().into_iter().chain(vertical.clone().into_iter()).chain([Action::A].into_iter()).collect::<Vec<_>>();
+                    let order_two = vertical.clone().into_iter().chain(horizontal.clone().into_iter()).chain([Action::A].into_iter()).collect::<Vec<_>>();
+                    output_sequences = add_possibilities(output_sequences, vec![order_one, order_two], errors);
+                } else {
+                    let order_one = horizontal.clone().into_iter().chain(vertical.clone().into_iter()).chain([Action::A].into_iter()).collect::<Vec<_>>();
+                    output_sequences = add_possibilities(output_sequences, vec![order_one], errors);
+                }
+                current_pos = *new_pos;
+            }
+        }
+        all_output_sequences.append(&mut output_sequences);
+    }
+    // let output_sequence = output_sequences.into_iter().min_by_key(|sequence| sequence.len());
+    // output_sequence.unwrap_or(vec![])
+    all_output_sequences.into_iter().filter(|sequence| {
+        playback_ok(grid, blank.clone(), start_pos, sequence)
+    }).collect()
+}
+
+fn add_possibilities(sequences: Vec<Vec<Action>>, possibilities: Vec<Vec<Action>>, errors: &mut Vec<String>) -> Vec<Vec<Action>> {
+    let mut output_sequences = Vec::new();
+    for possibility in possibilities.into_iter() {
+        for sequence in sequences.iter() {
+            let mut sequence = sequence.clone();
+            sequence.extend(possibility.iter());
+            output_sequences.push(sequence);
+        }
+    }
+    output_sequences
+}
+
+fn playback_ok<T>(grid: &Grid<T>, blank: T, start_pos: Coord, sequence: &Vec<Action>) -> bool
+    where T: Eq + Hash + Clone {
+    let mut pos = start_pos;
+    for action in sequence.iter() {
+        match action {
+            Action::Up => {
+                pos = pos.add(&Coord::new(0, -1));
+            }
+            Action::Down => {
+                pos = pos.add(&Coord::new(0, 1));
+            }
+            Action::Left => {
+                pos = pos.add(&Coord::new(-1, 0));
+            }
+            Action::Right => {
+                pos = pos.add(&Coord::new(1, 0));
+            }
+            Action::A => {}
+            Action::Empty => {
+                return false;
+            }
+        }
+        if let Some(tile) = grid.get(pos) {
+            if *tile == blank {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    }
+    true
+}
+
 // +---+---+---+
 // | 7 | 8 | 9 |
 // +---+---+---+
@@ -142,53 +244,3 @@ pub fn puzzle(input: &str) -> DayOutput {
 // Left, A, Right, Up, A, A, Left, A, Right, A, Down, Left, A, Left,
 // A, Right, Right, Up, A, A, A, Down, A, Up, Left, A, Right, A]
 
-pub fn reverse_engineer<T>(grid: &Grid<T>, start_pos: Coord, sequence: &Vec<T>) -> Vec<Action>
-    where T: Eq + Hash + Clone {
-    let mut coordinate_lookup: HashMap<T, Coord> = HashMap::new();
-    let _ = grid.map_grid(|cell, x, y| {
-        coordinate_lookup.entry(cell.clone()).or_insert(Coord((x as i32, y as i32)));
-    });
-    let mut output_sequence = Vec::new();
-    let mut current_pos = start_pos;
-    for item in sequence.iter() {
-        if let Some(new_pos) = coordinate_lookup.get(item) {
-            let delta = new_pos.subtract(&current_pos);
-            let Coord((delta_x, delta_y)) = delta;
-            if delta_x > 0 {
-                for _ in 0..delta_x {
-                    output_sequence.push(Action::Right);
-                }
-            }
-            if delta_y > 0 {
-                for _ in 0..delta_y {
-                    output_sequence.push(Action::Down);
-                }
-            }
-            if delta_y < 0 {
-                for _ in 0..-delta_y {
-                    output_sequence.push(Action::Up);
-                }
-            }
-            if delta_x < 0 {
-                for _ in 0..-delta_x {
-                    output_sequence.push(Action::Left);
-                }
-            }
-            output_sequence.push(Action::A);
-            current_pos = *new_pos;
-        }
-    }
-    output_sequence
-}
-
-fn _add_possibilities(sequences: Vec<Vec<Action>>, possibilities: Vec<Vec<Action>>) -> Vec<Vec<Action>> {
-    let mut output_sequences = Vec::new();
-    for possibility in possibilities.into_iter() {
-        for sequence in sequences.iter() {
-            let mut sequence = sequence.clone();
-            sequence.extend(possibility.iter());
-            output_sequences.push(sequence);
-        }
-    }
-    output_sequences
-}
