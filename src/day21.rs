@@ -5,7 +5,7 @@ use crate::app::{DayOutput, Diagnostic, Tab};
 use crate::grid::{Coord, Grid};
 
 const DIRECTION_KEY_LEVELS_SILVER: usize = 2;
-const DIRECTION_KEY_LEVELS_GOLD: usize = 15;
+const DIRECTION_KEY_LEVELS_GOLD: usize = 25;
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum Action {
@@ -25,6 +25,7 @@ enum NumpadKey {
 }
 
 type ArrowLookup = HashMap<(Action, Action), Vec<Action>>;
+type CostLookup = HashMap<(Action, Action), u64>;
 
 pub fn puzzle(input: &str) -> DayOutput {
     // Parse input
@@ -61,14 +62,74 @@ pub fn puzzle(input: &str) -> DayOutput {
     ]);
 
     // Construct lookup for direction grid
+    let (optimal_pairs, lookup) = construct_arrow_lookup(&mut errors, direction_start, &direction_grid);
+    let cost_lookup = construct_layer_lookups(&lookup, DIRECTION_KEY_LEVELS_SILVER);
+    let (silver_solutions, silver) = run_expansion(&numpad_grid, numpad_start, &cost_lookup, inputs.clone(), &mut errors);
+    let cost_lookup_gold = construct_layer_lookups(&lookup, DIRECTION_KEY_LEVELS_GOLD);
+    let (gold_solutions, gold) = run_expansion(&numpad_grid, numpad_start, &cost_lookup_gold, inputs, &mut errors);
+
+    tabs.push(Tab {
+        title: "Errors".to_string(),
+        strings: errors,
+        grid: vec![],
+    });
+    tabs.push(Tab {
+        title: "Optimal".to_string(),
+        strings: optimal_pairs,
+        grid: vec![],
+    });
+    tabs.push(Tab {
+        title: "Lookup".to_string(),
+        strings: lookup.iter().map(|(pair, actions)| {
+            format!("{:?}, {:?}", pair, actions)
+        }).collect(),
+        grid: vec![],
+    });
+    tabs.push(Tab {
+        title: "Silver solutions".to_string(),
+        strings: silver_solutions.into_iter().map(|(code, cost)| format!("{}: {}", code, cost)).collect(),
+        grid: vec![],
+    });
+    tabs.push(Tab {
+        title: "Gold solutions".to_string(),
+        strings: gold_solutions.into_iter().map(|(code, cost)| format!("{}: {}", code, cost)).collect(),
+        grid: vec![],
+    });
+
+    DayOutput {
+        silver_output: format!("{}", silver),
+        gold_output: format!("{}", gold),
+        diagnostic: Diagnostic::with_tabs(tabs, String::new()),
+    }
+}
+
+fn run_expansion(numpad_grid: &Grid<NumpadKey>, numpad_start: Coord, cost_lookup: &CostLookup, inputs: Vec<(Vec<NumpadKey>, u64)>, errors: &mut Vec<String>) -> (Vec<(u64, u64)>, u64) {
+    let mut response_value = 0;
+    let mut separated_scores = Vec::new();
+    for (input_row, code) in inputs {
+        let mut action_possibilities = reverse_engineer(&numpad_grid, NumpadKey::Empty, numpad_start, &vec![input_row], errors);
+        let mut costs = Vec::new();
+        for possibility in action_possibilities {
+            let cost = find_cost_for_sequence(cost_lookup, &possibility);
+            costs.push(cost);
+        }
+        if let Some(smallest_cost) = costs.iter().min() {
+            response_value += code * *smallest_cost as u64;
+            separated_scores.push((code, *smallest_cost));
+        }
+    }
+    (separated_scores, response_value)
+}
+
+fn construct_arrow_lookup(mut errors: &mut Vec<String>, direction_start: Coord, direction_grid: &Grid<Action>) -> (Vec<String>, HashMap<(Action, Action), Vec<Action>>) {
     let optimal_clusters = Action::get_all_pairs().into_iter().map(|(first, second)| {
         let mut outputs: Vec<(Vec<Action>, Vec<Action>, Vec<Action>, Vec<Action>)> = Vec::new();
         let seqs1 = reverse_engineer_from_first(&direction_grid, &vec![first, second], &mut errors);
         for seq1 in seqs1.into_iter() {
-            errors.push(format!("Seq 1 {}{} {:?}", first, second, seq1));
+            // errors.push(format!("Seq 1 {}{} {:?}", first, second, seq1));
             let seqs2 = reverse_engineer(&direction_grid, Action::Empty, direction_start, &vec![seq1.clone()], &mut errors);
             for seq2 in seqs2.into_iter() {
-                errors.push(format!("Seq 2 {}{} {:?}", first, second, seq2));
+                // errors.push(format!("Seq 2 {}{} {:?}", first, second, seq2));
                 let seqs3 = reverse_engineer(&direction_grid, Action::Empty, direction_start, &vec![seq2.clone()], &mut errors);
                 for seq3 in seqs3.into_iter() {
                     let seqs4 = reverse_engineer(&direction_grid, Action::Empty, direction_start, &vec![seq3.clone()], &mut errors);
@@ -98,120 +159,57 @@ pub fn puzzle(input: &str) -> DayOutput {
             errors.push(format!("Pair {:?} gave a None", pair));
         }
     }
-    // >>>>A
-    // v<<A
-
-    // Process each row
-    let (output_gold, gold) = run_expansion(&mut errors, inputs.clone(), numpad_start, &numpad_grid, &lookup, DIRECTION_KEY_LEVELS_GOLD);
-    // let gold = 0;
-    let (expansion_log, possibilities, outputs_silver, stepped_outputs, silver) = run_expansion_logged(&mut errors, inputs.clone(), numpad_start, &numpad_grid, &lookup, DIRECTION_KEY_LEVELS_SILVER);
-    tabs.push(Tab {
-        title: "Output Gold".to_string(),
-        strings: output_gold.into_iter().map(|sequence|{
-            format!("{:?}", sequence)
-        }).collect(),
-        grid: vec![],
-    });
-    tabs.push(Tab {
-        title: "Errors".to_string(),
-        strings: errors,
-        grid: vec![],
-    });
-    tabs.push(Tab {
-        title: "Outputs".to_string(),
-        strings: outputs_silver.iter().map(|(_actions, code, length)| format!("Length {}, Code {}", length, code)).collect(),
-        grid: vec![],
-    });
-    tabs.push(Tab {
-        title: "Stepped outputs".to_string(),
-        strings: stepped_outputs,
-        grid: vec![],
-    });
-    tabs.push(Tab {
-        title: "Optimal".to_string(),
-        strings: optimal_pairs,
-        grid: vec![],
-    });
-    tabs.push(Tab {
-        title: "Possibilities".to_string(),
-        strings: possibilities,
-        grid: vec![],
-    });
-    tabs.push(Tab {
-        title: "Expansion log".to_string(),
-        strings: expansion_log.into_iter().map(|list| format!("{:?}", list)).collect(),
-        grid: vec![],
-    });
-    tabs.push(Tab {
-        title: "Lookup".to_string(),
-        strings: lookup.iter().map(|(pair, actions)| {
-            format!("{:?}, {:?}", pair, actions)
-        }).collect(),
-        grid: vec![],
-    });
-
-    DayOutput {
-        silver_output: format!("{}", silver),
-        gold_output: format!("{}", gold),
-        diagnostic: Diagnostic::with_tabs(tabs, String::new()),
-    }
+    (optimal_pairs, lookup)
 }
 
-fn run_expansion(errors: &mut Vec<String>, inputs: Vec<(Vec<NumpadKey>, u64)>, numpad_start: Coord, numpad_grid: &Grid<NumpadKey>, lookup: &ArrowLookup, num_arrow_expansions: usize) -> (Vec<Vec<Action>>, u64) {
-    let mut response_value = 0;
-    let mut all_shortest = Vec::new();
-    for (input_row, code) in inputs {
-        let mut action_possibilities = reverse_engineer(&numpad_grid, NumpadKey::Empty, numpad_start, &vec![input_row], errors);
-        let mut expanded_possibilities = Vec::new();
-        for input_actions in action_possibilities.iter() {
-            let mut actions = input_actions.clone();
-            for _level in 0..num_arrow_expansions {
-                actions = expand_arrow_key(&lookup, &actions, errors);
-            }
-            expanded_possibilities.push(actions);
-        }
-        let shortest = expanded_possibilities.into_iter().min_by_key(|sequence| sequence.len()).unwrap_or(Vec::new());
-        let length = shortest.len();
-        response_value += code * length as u64;
-        all_shortest.push(shortest);
+fn construct_layer_lookups(arrow_lookup: &ArrowLookup, num_layers: usize) -> CostLookup {
+    let mut remaining_layers = num_layers - 1;
+    let mut previous_layer = construct_first_layer_lookup(arrow_lookup);
+    for _layer in (0..remaining_layers).rev() {
+        let new_layer = construct_layer_lookup(arrow_lookup, &previous_layer);
+        previous_layer = new_layer;
     }
-    (all_shortest, response_value)
+    previous_layer
+}
+fn construct_layer_lookups_all(arrow_lookup: &ArrowLookup, num_layers: usize) -> HashMap<usize, CostLookup> {
+    let mut remaining_layers = num_layers - 1;
+    let mut metamap = HashMap::new();
+    let mut previous_layer = construct_first_layer_lookup(arrow_lookup);
+    metamap.insert(remaining_layers, previous_layer.clone());
+    for layer in (0..remaining_layers).rev() {
+        let new_layer = construct_layer_lookup(arrow_lookup, &previous_layer);
+        metamap.insert(layer, new_layer.clone());
+        previous_layer = new_layer;
+    }
+    metamap
 }
 
-fn run_expansion_logged(mut errors: &mut Vec<String>, inputs: Vec<(Vec<NumpadKey>, u64)>, numpad_start: Coord, numpad_grid: &Grid<NumpadKey>, lookup: &ArrowLookup, num_arrow_expansions: usize) -> (Vec<Vec<Action>>, Vec<String>, Vec<(Vec<Action>, u64, usize)>, Vec<String>, u64) {
-    let mut expansion_log = Vec::new();
-    let mut possibilities = Vec::new();
-    let mut outputs_silver = Vec::new();
-    let mut stepped_outputs = Vec::new();
-    let mut response_value = 0;
-    for (input_row, code) in inputs {
-        let mut action_possibilities = reverse_engineer(&numpad_grid, NumpadKey::Empty, numpad_start, &vec![input_row], errors);
-        let mut expanded_possibilities = Vec::new();
-        for input_actions in action_possibilities.iter() {
-            let mut actions = input_actions.clone();
-            stepped_outputs.push(format!("{:?}", actions));
-            expansion_log.push(actions.clone());
-            for _level in 0..num_arrow_expansions {
-                actions = expand_arrow_key(&lookup, &actions, &mut errors);
-                // expansion_log.push(actions.clone());
-
-                stepped_outputs.push(format!("{:?}", actions));
-                // actions = reverse_engineer(&direction_grid, Action::Empty, direction_start, &actions, &mut errors);
-            }
-            expanded_possibilities.push(actions);
+fn construct_layer_lookup(arrow_lookup: &ArrowLookup, sub_layer_lookup: &CostLookup) -> CostLookup {
+    let mut output = HashMap::new();
+    for pair in Action::get_all_pairs() {
+        if let Some(sequence) = arrow_lookup.get(&pair) {
+            let total_cost = find_cost_for_sequence(sub_layer_lookup, &sequence);
+            output.insert(pair, total_cost);
         }
-        // errors.push(format!("{:?}", action_possibilities));
-        let num_possibilities = expanded_possibilities.len();
-        let longest_len = expanded_possibilities.iter().map(|list| list.len()).min().unwrap_or(0);
-        let shortest = expanded_possibilities.into_iter().min_by_key(|sequence| sequence.len()).unwrap_or(Vec::new());
-        let shortest_len = shortest.len();
-        possibilities.push(format!("{:03}A: Silver had {} possibilties, longest: {}, shortest: {}", code, num_possibilities, longest_len, shortest_len));
-        // stepped_outputs.push(format!("{:?}", shortest));
-        let length = shortest.len();
-        response_value += code * length as u64;
-        outputs_silver.push((shortest, code, length));
     }
-    (expansion_log, possibilities, outputs_silver, stepped_outputs, response_value)
+    output
+}
+
+fn construct_first_layer_lookup(arrow_lookup: &ArrowLookup) -> CostLookup {
+    HashMap::from_iter(arrow_lookup.iter().map(|(pair, list)| (pair.clone(), list.len() as u64)))
+}
+
+fn find_cost_for_sequence(cost_lookup: &CostLookup, sequence: &Vec<Action>) -> u64 {
+    let mut last = Action::A;
+    let mut total_cost = 0;
+    for item in sequence {
+        let current_pair = (last, *item);
+        if let Some(cost) = cost_lookup.get(&current_pair) {
+            total_cost += cost;
+        }
+        last = *item;
+    }
+    total_cost
 }
 
 pub fn reverse_engineer_from_first(grid: &Grid<Action>, sequences: &Vec<Action>, errors: &mut Vec<String>) -> Vec<Vec<Action>> {
@@ -277,38 +275,10 @@ pub fn reverse_engineer<T>(grid: &Grid<T>, blank: T, start_pos: Coord, sequences
         }
         all_output_sequences.append(&mut output_sequences);
     }
-    // let output_sequence = output_sequences.into_iter().min_by_key(|sequence| sequence.len());
-    // output_sequence.unwrap_or(vec![])
-    let possibilities_before = all_output_sequences.len();
-    let min_length = all_output_sequences.iter().map(|sequence| sequence.len()).min().unwrap_or(0);
     let all_output_sequences = all_output_sequences.into_iter().filter(|sequence| {
-        // if sequence.len() > min_length {
-        //     return false;
-        // }
         playback_ok(grid, blank.clone(), start_pos, sequence)
-        // true
     }).collect::<Vec<_>>();
-    // errors.push(format!("Pruning from {} to {}", possibilities_before, all_output_sequences.len()));
     all_output_sequences
-}
-
-fn expand_arrow_key(lookup: &ArrowLookup, sequence: &Vec<Action>, errors: &mut Vec<String>) -> Vec<Action> {
-    let mut output = Vec::new();
-    let mut last = Action::A;
-    for item in sequence {
-        let pair = (last, *item);
-        match lookup.get(&pair) {
-            Some(addition) => {
-                output.extend(addition.iter());
-            }
-            None => {
-                errors.push(format!("Couldn't find pair {:?}", pair));
-                return Vec::new();
-            }
-        }
-        last = *item;
-    }
-    output
 }
 
 fn add_possibilities(sequences: Vec<Vec<Action>>, possibilities: Vec<Vec<Action>>, errors: &mut Vec<String>) -> Vec<Vec<Action>> {
