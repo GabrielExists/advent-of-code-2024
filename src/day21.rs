@@ -1,15 +1,19 @@
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter, Write};
 use std::hash::Hash;
 use crate::app::{DayOutput, Diagnostic, Tab};
 use crate::grid::{Coord, Grid};
 
+const DIRECTION_KEY_LEVELS_SILVER: usize = 3;
+const DIRECTION_KEY_LEVELS_GOLD: usize = 25;
+
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum Action {
+    A,
     Up,
     Down,
     Left,
     Right,
-    A,
     Empty,
 }
 
@@ -56,17 +60,48 @@ pub fn puzzle(input: &str) -> DayOutput {
     let mut stepped_outputs = Vec::new();
     let mut silver = 0;
     for (input_row, code) in inputs {
-        let actions_one = reverse_engineer(&numpad_grid, NumpadKey::Empty, numpad_start, &vec![input_row], &mut errors);
-        let actions_two = reverse_engineer(&direction_grid, Action::Empty, direction_start, &actions_one, &mut errors);
-        let actions_three = reverse_engineer(&direction_grid, Action::Empty, direction_start, &actions_two, &mut errors);
-        // stepped_outputs.push(format!("{:?}", actions_one));
-        // stepped_outputs.push(format!("{:?}", actions_two));
-        let shortest = actions_three.into_iter().min_by_key(|sequence| sequence.len()).unwrap_or(Vec::new());
+        let mut actions = reverse_engineer(&numpad_grid, NumpadKey::Empty, numpad_start, &vec![input_row], &mut errors);
+        for level in 1..DIRECTION_KEY_LEVELS_SILVER {
+            actions = reverse_engineer(&direction_grid, Action::Empty, direction_start, &actions, &mut errors);
+            // errors.push(format!("Silver {} had {} possibilties", level, actions.len()));
+        }
+        let shortest = actions.into_iter().min_by_key(|sequence| sequence.len()).unwrap_or(Vec::new());
         stepped_outputs.push(format!("{:?}", shortest));
         let length = shortest.len();
         silver += code * length as u64;
         outputs.push((shortest, code, length));
     }
+
+    let optimal_pairs = Action::get_all_pairs().into_iter().map(|(first, second)| {
+        let mut outputs: Vec<(Vec<Action>, Vec<Action>, Vec<Action>, Vec<Action>)> = Vec::new();
+        let seqs1 = reverse_engineer_list(&direction_grid, &vec![first, second], &mut errors);
+        for seq1 in seqs1.into_iter() {
+            let seqs2 = reverse_engineer_list(&direction_grid, &seq1, &mut errors);
+            for seq2 in seqs2.into_iter() {
+                let seqs3 = reverse_engineer_list(&direction_grid, &seq2, &mut errors);
+                for seq3 in seqs3.into_iter() {
+                    let seqs4 = reverse_engineer_list(&direction_grid, &seq3, &mut errors);
+                    for seq4 in seqs4.into_iter() {
+                        outputs.push((seq1.clone(), seq2.clone(), seq3.clone(), seq4.clone()))
+                    }
+                }
+            }
+        }
+        let shortest = outputs.into_iter().min_by_key(|(_, _, _, seq4)| {
+            seq4.len()
+        });
+        if let Some((seq1, seq2, seq3, seq4)) = shortest {
+            format!("{} to {}, {}: {:?} | {:?}", first, second, seq4.len(), seq1, seq2)
+        } else {
+            String::new()
+        }
+    }).collect::<Vec<String>>();
+
+    tabs.push(Tab {
+        title: "Optimal".to_string(),
+        strings: optimal_pairs,
+        grid: vec![],
+    });
     tabs.push(Tab {
         title: "Outputs".to_string(),
         strings: outputs.iter().map(|(_actions, code, length)| format!("Length {}, Code {}", length, code)).collect(),
@@ -77,10 +112,43 @@ pub fn puzzle(input: &str) -> DayOutput {
         strings: stepped_outputs,
         grid: vec![],
     });
+    tabs.push(Tab {
+        title: "Analysis".to_string(),
+        strings: [
+            (Action::A, Action::Down),
+            (Action::Down, Action::A),
+            (Action::Right, Action::Up),
+            (Action::Up, Action::Right),
+        ].into_iter().map(|(from, to)| {
+            let seq1 = get_transition(from, to).unwrap_or(Vec::new());
+            let seq2 = expand_numpad(&seq1, &mut errors);
+            let seq3 = expand_numpad(&seq2, &mut errors);
+            let seq4 = expand_numpad(&seq3, &mut errors);
+            [
+                format!("{:?}->{:?}, {} {:?}", from, to, seq1.len(), seq1),
+                format!("{:?}->{:?}, {} {:?}", from, to, seq2.len(), seq2),
+                format!("{:?}->{:?}, {} {:?}", from, to, seq3.len(), seq3),
+                format!("{:?}->{:?}, {} {:?}", from, to, seq4.len(), seq4)
+            ]
+        }).flatten().collect(),
+        grid: vec![],
+    });
     DayOutput {
         silver_output: format!("{}", silver),
         gold_output: format!("{}", 0),
         diagnostic: Diagnostic::with_tabs(tabs, format!("{:?}", errors)),
+    }
+}
+
+pub fn reverse_engineer_list(grid: &Grid<Action>, sequences: &Vec<Action>, errors: &mut Vec<String>) -> Vec<Vec<Action>> {
+    if let Some((first, rest)) = sequences.split_first() {
+        if let Some(start) = grid.find(|item| *item == *first) {
+            reverse_engineer(&grid, Action::Empty, start, &vec![rest.to_vec()],  errors)
+        } else {
+            Vec::new()
+        }
+    } else {
+        Vec::new()
     }
 }
 
@@ -135,9 +203,129 @@ pub fn reverse_engineer<T>(grid: &Grid<T>, blank: T, start_pos: Coord, sequences
     }
     // let output_sequence = output_sequences.into_iter().min_by_key(|sequence| sequence.len());
     // output_sequence.unwrap_or(vec![])
-    all_output_sequences.into_iter().filter(|sequence| {
+    let possibilities_before = all_output_sequences.len();
+    let min_length = all_output_sequences.iter().map(|sequence| sequence.len()).min().unwrap_or(0);
+    let all_output_sequences = all_output_sequences.into_iter().filter(|sequence| {
+        // if sequence.len() > min_length {
+        //     return false;
+        // }
         playback_ok(grid, blank.clone(), start_pos, sequence)
-    }).collect()
+    }).collect::<Vec<_>>();
+    // errors.push(format!("Pruning from {} to {}", possibilities_before, all_output_sequences.len()));
+    all_output_sequences
+}
+
+pub fn expand_numpad(sequence: &Vec<Action>, errors: &mut Vec<String>) -> Vec<Action> {
+    let mut output = Vec::new();
+    let mut last: Option<Action> = None;
+    for item in sequence {
+        if let Some(last_value) = last {
+            match get_transition(last_value, *item) {
+                Some(mut addition) => {
+                    output.append(&mut addition);
+                }
+                None => {
+                    return Vec::new();
+                }
+            }
+        }
+        last = Some(*item);
+    }
+    output
+}
+
+pub fn get_transition(previous: Action, next: Action) -> Option<Vec<Action>> {
+    match (previous, next) {
+        (Action::A, Action::A) => Some(vec![Action::A]),
+        (Action::A, Action::Up) => Some(vec![Action::Left, Action::A]),
+        (Action::A, Action::Down) => Some(vec![Action::Left, Action::Down, Action::A]), // !
+        (Action::A, Action::Left) => Some(vec![Action::Down, Action::Left, Action::Left, Action::A]),
+        (Action::A, Action::Right) => Some(vec![Action::Down, Action::A]),
+        (Action::A, Action::Empty) => None,
+        (Action::Up, Action::A) => Some(vec![Action::Right, Action::A]),
+        (Action::Up, Action::Up) => Some(vec![Action::A]),
+        (Action::Up, Action::Down) => Some(vec![Action::Down, Action::A]),
+        (Action::Up, Action::Left) => Some(vec![Action::Down, Action::Left, Action::A]),
+        (Action::Up, Action::Right) => Some(vec![Action::Down, Action::Right, Action::A]), // !
+        (Action::Up, Action::Empty) => None,
+        (Action::Down, Action::A) => Some(vec![Action::Up, Action::Right, Action::A]), // !!
+        (Action::Down, Action::Up) => Some(vec![Action::Up, Action::A]),
+        (Action::Down, Action::Down) => Some(vec![Action::A]),
+        (Action::Down, Action::Left) => Some(vec![Action::Left, Action::A]),
+        (Action::Down, Action::Right) => Some(vec![Action::Right, Action::A]),
+        (Action::Down, Action::Empty) => None,
+        (Action::Left, Action::A) => Some(vec![Action::Right, Action::Right, Action::Up, Action::A]),
+        (Action::Left, Action::Up) => Some(vec![Action::Right, Action::Up, Action::A]),
+        (Action::Left, Action::Down) => Some(vec![Action::Right, Action::A]),
+        (Action::Left, Action::Left) => Some(vec![Action::A]),
+        (Action::Left, Action::Right) => Some(vec![Action::Right, Action::Right, Action::A]),
+        (Action::Left, Action::Empty) => None,
+        (Action::Right, Action::A) => Some(vec![Action::Up, Action::A]),
+        (Action::Right, Action::Up) => Some(vec![Action::Left, Action::Up, Action::A]), // !
+        (Action::Right, Action::Down) => Some(vec![Action::Left, Action::A]),
+        (Action::Right, Action::Left) => Some(vec![Action::Left, Action::Left, Action::A]),
+        (Action::Right, Action::Right) => Some(vec![Action::A]),
+        (Action::Right, Action::Empty) => None,
+        (Action::Empty, Action::A) => None,
+        (Action::Empty, Action::Up) => None,
+        (Action::Empty, Action::Down) => None,
+        (Action::Empty, Action::Left) => None,
+        (Action::Empty, Action::Right) => None,
+        (Action::Empty, Action::Empty) => None,
+    }
+}
+
+pub fn get_transition_mul(previous: Action, next: Action) -> Vec<Vec<Action>> {
+    match (previous, next) {
+        (Action::A, Action::A) => vec!(vec![Action::A]),
+        (Action::A, Action::Up) => vec!(vec![Action::Left, Action::A]),
+        (Action::A, Action::Down) => vec!(
+            vec![Action::Left, Action::Down, Action::A],
+            vec![Action::Down, Action::Left, Action::A],
+        ), // !
+        (Action::A, Action::Left) => vec!(vec![Action::Down, Action::Left, Action::Left, Action::A]),
+        (Action::A, Action::Right) => vec!(vec![Action::Down, Action::A]),
+        (Action::A, Action::Empty) => Vec::new(),
+        (Action::Up, Action::A) => vec!(vec![Action::Right, Action::A]),
+        (Action::Up, Action::Up) => vec!(vec![Action::A]),
+        (Action::Up, Action::Down) => vec!(vec![Action::Down, Action::A]),
+        (Action::Up, Action::Left) => vec!(vec![Action::Down, Action::Left, Action::A]),
+        (Action::Up, Action::Right) => vec!(
+            vec![Action::Down, Action::Right, Action::A],
+            vec![Action::Right, Action::Down, Action::A],
+        ), // !
+        (Action::Up, Action::Empty) => Vec::new(),
+        (Action::Down, Action::A) => vec!(
+            vec![Action::Up, Action::Right, Action::A],
+            vec![Action::Right, Action::Up, Action::A],
+        ), // !!
+        (Action::Down, Action::Up) => vec!(vec![Action::Up, Action::A]),
+        (Action::Down, Action::Down) => vec!(vec![Action::A]),
+        (Action::Down, Action::Left) => vec!(vec![Action::Left, Action::A]),
+        (Action::Down, Action::Right) => vec!(vec![Action::Right, Action::A]),
+        (Action::Down, Action::Empty) => Vec::new(),
+        (Action::Left, Action::A) => vec!(vec![Action::Right, Action::Right, Action::Up, Action::A]),
+        (Action::Left, Action::Up) => vec!(vec![Action::Right, Action::Up, Action::A]),
+        (Action::Left, Action::Down) => vec!(vec![Action::Right, Action::A]),
+        (Action::Left, Action::Left) => vec!(vec![Action::A]),
+        (Action::Left, Action::Right) => vec!(vec![Action::Right, Action::Right, Action::A]),
+        (Action::Left, Action::Empty) => Vec::new(),
+        (Action::Right, Action::A) => vec!(vec![Action::Up, Action::A]),
+        (Action::Right, Action::Up) => vec!(
+            vec![Action::Left, Action::Up, Action::A],
+            vec![Action::Up, Action::Left, Action::A],
+        ), // !
+        (Action::Right, Action::Down) => vec!(vec![Action::Left, Action::A]),
+        (Action::Right, Action::Left) => vec!(vec![Action::Left, Action::Left, Action::A]),
+        (Action::Right, Action::Right) => vec!(vec![Action::A]),
+        (Action::Right, Action::Empty) => Vec::new(),
+        (Action::Empty, Action::A) => Vec::new(),
+        (Action::Empty, Action::Up) => Vec::new(),
+        (Action::Empty, Action::Down) => Vec::new(),
+        (Action::Empty, Action::Left) => Vec::new(),
+        (Action::Empty, Action::Right) => Vec::new(),
+        (Action::Empty, Action::Empty) => Vec::new(),
+    }
 }
 
 fn add_possibilities(sequences: Vec<Vec<Action>>, possibilities: Vec<Vec<Action>>, errors: &mut Vec<String>) -> Vec<Vec<Action>> {
@@ -154,6 +342,13 @@ fn add_possibilities(sequences: Vec<Vec<Action>>, possibilities: Vec<Vec<Action>
 
 fn playback_ok<T>(grid: &Grid<T>, blank: T, start_pos: Coord, sequence: &Vec<Action>) -> bool
     where T: Eq + Hash + Clone {
+    if let Some(tile) = grid.get(start_pos) {
+        if *tile == blank {
+            return false;
+        }
+    } else {
+        return false;
+    }
     let mut pos = start_pos;
     for action in sequence.iter() {
         match action {
@@ -183,6 +378,39 @@ fn playback_ok<T>(grid: &Grid<T>, blank: T, start_pos: Coord, sequence: &Vec<Act
         }
     }
     true
+}
+
+impl Action {
+    pub fn get_all() -> Vec<Action> {
+        vec![
+            Action::A,
+            Action::Up,
+            Action::Down,
+            Action::Left,
+            Action::Right,
+            Action::Empty,
+        ]
+    }
+    pub fn get_all_pairs() -> Vec<(Action, Action)> {
+        Self::get_all().into_iter().map(|first| {
+            Self::get_all().into_iter().map(move |second| {
+                (first, second)
+            })
+        }).flatten().collect()
+    }
+}
+
+impl Display for Action {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Action::A => f.write_str("A"),
+            Action::Up => f.write_str("^"),
+            Action::Down => f.write_str("v"),
+            Action::Left => f.write_str("<"),
+            Action::Right => f.write_str(">"),
+            Action::Empty => f.write_str("!"),
+        }
+    }
 }
 
 // +---+---+---+
