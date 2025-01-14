@@ -47,10 +47,21 @@ pub fn puzzle(input: &str) -> DayOutput {
     // These are constant spacings of 101 and 103.
     // The point at which these intersect might be interesting.
     // So I solved y = 101x + 68, y = 103z + 136 and found that there is a y at 7037 and then again every additional 10403 seconds
+
+    // For my second set of inputs I found vertical constellations at 77, 178, for a spacing of 101
+    // And horizontal constellations at 18, 121, for a spacing of 103
+    // y = 101x + 77, y = 103z + 18
+    // y = 8258 + 10403 n
     let grid = apply_movement(&robots, 7037, &mut errors);
     add_tab(&mut tabs, 7037, grid);
     let grid = apply_movement(&robots, 17440, &mut errors);
     add_tab(&mut tabs, 17440, grid);
+    let starting_point = 8258;
+    let repeat_every = 10403;
+    let grid = apply_movement(&robots, starting_point, &mut errors);
+    add_tab(&mut tabs, starting_point, grid);
+    let grid = apply_movement(&robots, starting_point + repeat_every, &mut errors);
+    add_tab(&mut tabs, starting_point + repeat_every, grid);
     // Manual search data
     for seconds in 0..400 {
         let grid = apply_movement(&robots, seconds, &mut errors);
