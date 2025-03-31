@@ -20,6 +20,7 @@ log = "0.4.19"
 regex = "1.9.1"
 yew_icons = "0.7.2"
 indextree = "4.6.0"
+itertools = "0.14.0"
 
 
 #[workspace]

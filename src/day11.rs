@@ -3,8 +3,8 @@ use crate::app::{DayOutput, Diagnostic, Tab};
 
 pub fn puzzle(input: &str) -> DayOutput {
     let input_values = input.split(" ").into_iter().filter_map(|text| {
-        text.parse::<u64>().ok()
-    }).collect::<Vec<u64>>();
+        text.parse::<u128>().ok()
+    }).collect::<Vec<u128>>();
 
     let mut evolutions_silver = vec![];
     let mut evolutions_gold = vec![];
@@ -13,7 +13,7 @@ pub fn puzzle(input: &str) -> DayOutput {
     let (sum_gold, errors_gold  ) = apply_evolutions(&input_values, 75, &mut evolutions_gold);
 
     let mut tabs = Vec::new();
-    tabs.push(Tab {
+    tabs.push(Tab { // Apparently 165674 is wrong
         title: "Silver".to_string(),
         strings: evolutions_silver,
         grid: vec![],
@@ -31,10 +31,10 @@ pub fn puzzle(input: &str) -> DayOutput {
     }
 }
 
-fn apply_evolutions(input_values: &Vec<u64>, num_evolutions: i32, evolutions: &mut Vec<String>) -> (u64, Vec<String>) {
+fn apply_evolutions(input_values: &Vec<u128>, num_evolutions: usize, evolutions: &mut Vec<String>) -> (u128, Vec<String>) {
     *evolutions = vec![format!("{:?}", input_values)];
-    let mut errors = Vec::new();
-    let mut values: HashMap<u64, u64> = HashMap::new();
+    let errors = Vec::new();
+    let mut values: HashMap<u128, u128> = HashMap::new();
     for input_value in input_values {
         let entry = values.entry(*input_value).or_insert(0);
         *entry += 1;
@@ -46,24 +46,13 @@ fn apply_evolutions(input_values: &Vec<u64>, num_evolutions: i32, evolutions: &m
                 add_value(&mut new_values, 1, num_values);
             } else {
                 let string = format!("{}", value);
-                if string.len() % 2 == 0 {
-                    let split = string.split_at(string.len() / 2);
-                    match split.0.parse::<u64>() {
-                        Ok(new_value) => {
-                            add_value(&mut new_values, new_value, num_values);
-                        }
-                        Err(error) => {
-                            errors.push(error.to_string());
-                        }
-                    }
-                    match split.1.parse::<u64>() {
-                        Ok(new_value) => {
-                            add_value(&mut new_values, new_value, num_values);
-                        }
-                        Err(error) => {
-                            errors.push(error.to_string());
-                        }
-                    }
+                let len = string.len();
+                if len % 2 == 0 {
+                    let half_power = 10u128.pow(len as u32 / 2);
+                    let new_value = value / half_power;
+                    add_value(&mut new_values, new_value, num_values);
+                    let new_value = value % half_power;
+                    add_value(&mut new_values, new_value, num_values);
                 } else {
                     add_value(&mut new_values, value * 2024, num_values);
                 }
@@ -77,7 +66,7 @@ fn apply_evolutions(input_values: &Vec<u64>, num_evolutions: i32, evolutions: &m
     (sum, errors)
 }
 
-fn add_value(new_values: &mut HashMap<u64, u64>, new_value: u64, num_values: u64) {
+fn add_value(new_values: &mut HashMap<u128, u128>, new_value: u128, num_values: u128) {
     let entry = new_values.entry(new_value).or_insert(0);
     *entry += num_values;
 }
