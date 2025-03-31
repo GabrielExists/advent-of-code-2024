@@ -1,9 +1,9 @@
-use std::collections::HashMap;
-use itertools::Itertools;
-use regex::{Match, Regex};
 use crate::app::{DayOutput, Diagnostic, Tab};
 use crate::common;
 use crate::common::combine_4;
+use itertools::Itertools;
+use regex::{Match, Regex};
+use std::collections::HashMap;
 
 #[derive(Copy, Clone, Debug)]
 enum GateType {
@@ -12,6 +12,7 @@ enum GateType {
     Or,
 }
 
+#[derive(Copy, Clone, Debug)]
 enum Terminal<'a> {
     Bool(bool),
     Gate(&'a str, GateType, &'a str),
@@ -22,28 +23,40 @@ pub fn puzzle(input: &str) -> DayOutput {
     let mut tabs: Vec<Tab> = Vec::new();
     let mut input_split = input.split("\n\n");
     let (input_terminals, input_logic) = (input_split.next(), input_split.next());
-    let terminals = input_terminals.map(|input_states| {
-        input_states.split("\n").filter_map(|line| {
-            let mut split = line.split(": ");
-            if let (Some(terminal_name), Some(state)) = (split.next(), split.next()) {
-                state.parse::<u8>().ok().map(|state| (terminal_name, state))
-            } else {
-                None
-            }
-        }).collect::<Vec<_>>()
-    }).unwrap_or(Vec::new());
+    let terminals = input_terminals
+        .map(|input_states| {
+            input_states
+                .split("\n")
+                .filter_map(|line| {
+                    let mut split = line.split(": ");
+                    if let (Some(terminal_name), Some(state)) = (split.next(), split.next()) {
+                        state.parse::<u8>().ok().map(|state| (terminal_name, state))
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or(Vec::new());
 
-    let re_gates = Regex::new(r"(?P<first>\S*) (?P<gate>AND|XOR|OR) (?P<second>\S*) -> (?P<output>\S*)").expect("Should compile");
-    let logic_gates = input_logic.map(|input_logic| {
-        re_gates.captures_iter(input_logic).filter_map(|captures| {
-            combine_4(
-                captures.name("first").map(|m| m.as_str()),
-                parse_gate(captures.name("gate")),
-                captures.name("second").map(|m| m.as_str()),
-                captures.name("output").map(|m| m.as_str()),
-            )
-        }).collect::<Vec<_>>()
-    }).unwrap_or(Vec::new());
+    let re_gates =
+        Regex::new(r"(?P<first>\S*) (?P<gate>AND|XOR|OR) (?P<second>\S*) -> (?P<output>\S*)")
+            .expect("Should compile");
+    let logic_gates = input_logic
+        .map(|input_logic| {
+            re_gates
+                .captures_iter(input_logic)
+                .filter_map(|captures| {
+                    combine_4(
+                        captures.name("first").map(|m| m.as_str()),
+                        parse_gate(captures.name("gate")),
+                        captures.name("second").map(|m| m.as_str()),
+                        captures.name("output").map(|m| m.as_str()),
+                    )
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or(Vec::new());
 
     let mut mapping = HashMap::new();
     for (terminal_name, value) in terminals.iter() {
@@ -57,23 +70,30 @@ pub fn puzzle(input: &str) -> DayOutput {
     let re_input_y = Regex::new(r"y(?P<num>\d*)").expect("Should compile");
     let re_output = Regex::new(r"z(?P<num>\d*)").expect("Should compile");
     let mut memoize = HashMap::<&str, bool>::new();
-    let mut silver: u64 = 0;
-    for terminal in mapping.keys() {
-        if let Some(captures) = re_output.captures(terminal) {
-            if let Some(bit) = common::capture_parse::<u32>(&captures, "num") {
-                let value = find_value(&mapping, &mut memoize, terminal);
-                match value {
-                    Ok(value) => {
-                        let value = if value { 1u64 } else { 0u64 };
-                        silver = silver | (value << bit);
-                    }
-                    Err(error) => errors.push(error),
-                }
-            }
+    let silver = calculate_output(&mut errors, &mapping, &mut memoize);
+
+
+    let plantuml_lines = create_plantuml(
+        &mut errors,
+        &mapping,
+        re_input_x,
+        re_input_y,
+        re_output,
+        &mut memoize,
+    );
+    let mut tests = Vec::new();
+    for i in 0..15 {
+        for j in 0..15 {
+            let output = calculate_output_given_inputs(&mut errors, &mapping, i, j);
+            tests.push(format!("{} & {} = {}", i, j, output));
         }
     }
-    let plantuml_lines = create_plantuml(&mut errors, &mapping, re_input_x, re_input_y, re_output, &mut memoize);
 
+    tabs.push(Tab {
+        title: "Tests".to_string(),
+        strings: tests,
+        grid: vec![],
+    });
     tabs.push(Tab {
         title: "Terminals".to_string(),
         strings: terminals.iter().map(|item| format!("{:?}", item)).collect(),
@@ -81,12 +101,19 @@ pub fn puzzle(input: &str) -> DayOutput {
     });
     tabs.push(Tab {
         title: "Gates".to_string(),
-        strings: logic_gates.iter().map(|item| format!("{:?}", item)).collect(),
+        strings: logic_gates
+            .iter()
+            .map(|item| format!("{:?}", item))
+            .collect(),
         grid: vec![],
     });
     tabs.push(Tab {
         title: "Memoize".to_string(),
-        strings: memoize.iter().sorted_by_key(|item|item.0).map(|item| format!("({:?}, {:?})", *item.0, if *item.1 {1} else {0})).collect(),
+        strings: memoize
+            .iter()
+            .sorted_by_key(|item| item.0)
+            .map(|item| format!("({:?}, {:?})", *item.0, if *item.1 { 1 } else { 0 }))
+            .collect(),
         grid: vec![],
     });
     tabs.push(Tab {
@@ -102,7 +129,64 @@ pub fn puzzle(input: &str) -> DayOutput {
     }
 }
 
-fn create_plantuml(errors: &mut Vec<String>, mapping: &HashMap<&str, Terminal>, re_input_x: Regex, re_input_y: Regex, re_output: Regex, memoize: &mut HashMap<&str, bool>) -> Vec<String> {
+fn calculate_output_given_inputs(errors: &mut Vec<String>, mapping: &HashMap<&str, Terminal>, x: u64, y: u64) -> u64 {
+    let mut mapping = mapping.clone();
+    for bit in 0..64 {
+        let x_key = format!("x{:02}", bit);
+        let y_key = format!("y{:02}", bit);
+        if let Some(x_terminal) = mapping.get_mut(&x_key as &str) {
+            if let Terminal::Bool(value) = x_terminal {
+                *value = x & (1 << bit) > 0;
+            }
+            if let Some(y_terminal) = mapping.get_mut(&y_key as &str) {
+                if let Terminal::Bool(value) = y_terminal {
+                    *value = y & (1 << bit) > 0;
+                }
+            } else {
+                errors.push(format!("Had {} but not {}", x_key, y_key));
+            }
+        } else {
+            // errors.push(format!("Setting x and y for {} bits", bit));
+            break;
+        }
+
+    }
+    let mut memoize = HashMap::new();
+    calculate_output(errors, &mapping, &mut memoize)
+}
+
+fn calculate_output<'a, 'b: 'a>(
+    errors: &mut Vec<String>,
+    mapping: &'b HashMap<&'b str, Terminal>,
+    mut memoize: &'a mut HashMap<&'b str, bool>,
+) -> u64 {
+    let re_output = Regex::new(r"z(?P<num>\d*)").expect("Should compile");
+    let mut result = 0;
+    for terminal in mapping.keys() {
+        if let Some(captures) = re_output.captures(terminal) {
+            if let Some(bit) = common::capture_parse::<u32>(&captures, "num") {
+                let value = find_value(mapping, &mut memoize, terminal);
+                match value {
+                    Ok(value) => {
+                        let value = if value { 1u64 } else { 0u64 };
+                        result = result | (value << bit);
+                    }
+                    Err(error) => errors.push(error),
+                }
+            }
+        }
+    }
+    result
+}
+
+fn create_plantuml(
+    errors: &mut Vec<String>,
+    mapping: &HashMap<&str, Terminal>,
+    re_input_x: Regex,
+    re_input_y: Regex,
+    re_output: Regex,
+    memoize: &mut HashMap<&str, bool>,
+) -> Vec<String> {
     let mut plantuml_lines = Vec::new();
     plantuml_lines.push("@startuml".to_string());
     plantuml_lines.push("left to right direction".to_string());
@@ -124,7 +208,7 @@ fn create_plantuml(errors: &mut Vec<String>, mapping: &HashMap<&str, Terminal>, 
                     GateType::And => "AND",
                     GateType::Xor => "XOR",
                     GateType::Or => "OR",
-                }
+                },
             };
             plantuml_lines.push(format!("map {}.{} {{", group_name, terminal_name));
             plantuml_lines.push(format!("\t{} => {}", kind, if *value { 1 } else { 0 }));
@@ -146,7 +230,11 @@ fn create_plantuml(errors: &mut Vec<String>, mapping: &HashMap<&str, Terminal>, 
     plantuml_lines
 }
 
-fn find_value<'a>(mapping: &'a HashMap<&'a str, Terminal>, memoize: &mut HashMap<&'a str, bool>, terminal_name: &'a str) -> Result<bool, String> {
+fn find_value<'a>(
+    mapping: &'a HashMap<&'a str, Terminal>,
+    memoize: &mut HashMap<&'a str, bool>,
+    terminal_name: &'a str,
+) -> Result<bool, String> {
     if let Some(value) = memoize.get(terminal_name) {
         return Ok(*value);
     }
