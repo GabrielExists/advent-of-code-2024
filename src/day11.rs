@@ -2,8 +2,11 @@ use std::collections::HashMap;
 use crate::app::{DayOutput, Diagnostic, Tab};
 
 pub fn puzzle(input: &str) -> DayOutput {
+    let mut parse_errors = Vec::new();
     let input_values = input.split(" ").into_iter().filter_map(|text| {
-        text.parse::<u128>().ok()
+        let a = text.trim().parse::<u128>();
+        parse_errors.push(format!("{:?}", a));
+        a.ok()
     }).collect::<Vec<u128>>();
 
     let mut evolutions_silver = vec![];
@@ -21,6 +24,11 @@ pub fn puzzle(input: &str) -> DayOutput {
     tabs.push(Tab {
         title: "Gold".to_string(),
         strings: evolutions_gold,
+        grid: vec![],
+    });
+    tabs.push(Tab {
+        title: "Parse steps".to_string(),
+        strings: parse_errors,
         grid: vec![],
     });
 
