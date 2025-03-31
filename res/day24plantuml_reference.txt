@@ -1,0 +1,41 @@
+@startuml
+left to right direction
+' Horizontal lines: -->, <--, <-->
+' Vertical lines: ->, <-, <->
+title Advent of Code 2024 day 24 diagram
+
+map x.x00 {
+    Input => 1
+}
+map x.x01 {
+    Input => 1
+}
+map x.x02 {
+    Input => 1
+}
+map y.y00 {
+   Input => 0
+}
+map y.y01 {
+   Input => 1
+}
+map y.y02 {
+   Input => 0
+}
+map z.z00 {
+   AND => 0
+}
+map z.z01 {
+   XOR => 0
+}
+map z.z02 {
+   OR => 0
+}
+x00 --> z00
+x01 --> z01
+x02 --> z02
+y00 --> z00
+y01 --> z01
+y02 --> z02
+
+@enduml

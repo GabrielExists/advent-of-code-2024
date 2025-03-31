@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use itertools::Itertools;
 use regex::{Match, Regex};
 use crate::app::{DayOutput, Diagnostic, Tab};
 use crate::common;
@@ -52,6 +53,8 @@ pub fn puzzle(input: &str) -> DayOutput {
         mapping.insert(*output, Terminal::Gate(first, *gate, second));
     }
 
+    let re_input_x = Regex::new(r"x(?P<num>\d*)").expect("Should compile");
+    let re_input_y = Regex::new(r"y(?P<num>\d*)").expect("Should compile");
     let re_output = Regex::new(r"z(?P<num>\d*)").expect("Should compile");
     let mut memoize = HashMap::<&str, bool>::new();
     let mut silver: u64 = 0;
@@ -69,6 +72,7 @@ pub fn puzzle(input: &str) -> DayOutput {
             }
         }
     }
+    let plantuml_lines = create_plantuml(&mut errors, &mapping, re_input_x, re_input_y, re_output, &mut memoize);
 
     tabs.push(Tab {
         title: "Terminals".to_string(),
@@ -82,7 +86,12 @@ pub fn puzzle(input: &str) -> DayOutput {
     });
     tabs.push(Tab {
         title: "Memoize".to_string(),
-        strings: memoize.iter().map(|item| format!("{:?}", item)).collect(),
+        strings: memoize.iter().sorted_by_key(|item|item.0).map(|item| format!("({:?}, {:?})", *item.0, if *item.1 {1} else {0})).collect(),
+        grid: vec![],
+    });
+    tabs.push(Tab {
+        title: "Plantuml".to_string(),
+        strings: plantuml_lines,
         grid: vec![],
     });
 
@@ -91,6 +100,50 @@ pub fn puzzle(input: &str) -> DayOutput {
         gold_output: format!("{}", 0),
         diagnostic: Diagnostic::with_tabs(tabs, format!("{:?}", errors)),
     }
+}
+
+fn create_plantuml(errors: &mut Vec<String>, mapping: &HashMap<&str, Terminal>, re_input_x: Regex, re_input_y: Regex, re_output: Regex, memoize: &mut HashMap<&str, bool>) -> Vec<String> {
+    let mut plantuml_lines = Vec::new();
+    plantuml_lines.push("@startuml".to_string());
+    plantuml_lines.push("left to right direction".to_string());
+    plantuml_lines.push("title Advent of Code 2024 day 24 diagram".to_string());
+    for (terminal_name, value) in memoize.iter().sorted() {
+        let group_name = if re_output.is_match(terminal_name) {
+            "z"
+        } else if re_input_x.is_match(terminal_name) {
+            "x"
+        } else if re_input_y.is_match(terminal_name) {
+            "y"
+        } else {
+            "m"
+        };
+        if let Some(terminal) = mapping.get(terminal_name) {
+            let kind = match terminal {
+                Terminal::Bool(_) => "Input",
+                Terminal::Gate(_, gate, _) => match gate {
+                    GateType::And => "AND",
+                    GateType::Xor => "XOR",
+                    GateType::Or => "OR",
+                }
+            };
+            plantuml_lines.push(format!("map {}.{} {{", group_name, terminal_name));
+            plantuml_lines.push(format!("\t{} => {}", kind, if *value { 1 } else { 0 }));
+            plantuml_lines.push("}".to_string());
+        } else {
+            errors.push(format!("Didn't find {} in mapping", terminal_name));
+        }
+    }
+    for (terminal_name, terminal) in mapping.iter() {
+        match terminal {
+            Terminal::Bool(_) => {}
+            Terminal::Gate(first, _, second) => {
+                plantuml_lines.push(format!("{} --> {}", first, terminal_name));
+                plantuml_lines.push(format!("{} --> {}", second, terminal_name));
+            }
+        }
+    }
+    plantuml_lines.push("@enduml".to_string());
+    plantuml_lines
 }
 
 fn find_value<'a>(mapping: &'a HashMap<&'a str, Terminal>, memoize: &mut HashMap<&'a str, bool>, terminal_name: &'a str) -> Result<bool, String> {
