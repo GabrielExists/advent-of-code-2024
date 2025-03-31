@@ -65,17 +65,16 @@ pub fn puzzle(input: &str) -> DayOutput {
         vec![Action::Empty, Action::Up, Action::A],
         vec![Action::Left, Action::Down, Action::Right],
     ]);
-    let (optimal_pairs, lookup) = construct_arrow_lookup(&mut errors, direction_start, &direction_grid);
-
-
-    tabs.push(Tab {
-        title: "Optimal".to_string(),
-        strings: optimal_pairs,
-        grid: vec![],
-    });
+    // let (optimal_pairs, lookup) = construct_arrow_lookup(&mut errors, direction_start, &direction_grid);
+    // tabs.push(Tab {
+    //     title: "Optimal".to_string(),
+    //     strings: optimal_pairs,
+    //     grid: vec![],
+    // });
+    let lookup = manual_arrow_lookup(&mut errors);
     tabs.push(Tab {
         title: "Lookup".to_string(),
-        strings: lookup.iter().map(|(pair, actions)| {
+        strings: lookup.iter().sorted().map(|(pair, actions)| {
             format!("{:?}, {:?}", pair, actions)
         }).collect(),
         grid: vec![],
@@ -142,6 +141,36 @@ fn p<T>(collection: T, name: &'static str) -> <Vec<String> as IntoIterator>::Int
 }
 
 
+fn manual_arrow_lookup(mut errors: &mut Vec<String>) -> HashMap<(Action, Action), Vec<Action>> {
+    let mut map = HashMap::new();
+    map.insert((Action::A, Action::A), vec![Action::A]);
+    map.insert((Action::A, Action::Down), vec![Action::Left, Action::Down, Action::A]);
+    map.insert((Action::A, Action::Left), vec![Action::Down, Action::Left, Action::Left, Action::A]);
+    map.insert((Action::A, Action::Right), vec![Action::Down, Action::A]);
+    map.insert((Action::A, Action::Up), vec![Action::Left, Action::A]);
+    map.insert((Action::Down, Action::A), vec![Action::Up, Action::Right, Action::A]);
+    map.insert((Action::Down, Action::Down), vec![Action::A]);
+    map.insert((Action::Down, Action::Left), vec![Action::Left, Action::A]);
+    map.insert((Action::Down, Action::Right), vec![Action::Right, Action::A]);
+    map.insert((Action::Down, Action::Up), vec![Action::Up, Action::A]); // This one performs the same as A Up until you get past the steps required for the first part.
+    map.insert((Action::Left, Action::A), vec![Action::Right, Action::Right, Action::Up, Action::A]);
+    map.insert((Action::Left, Action::Down), vec![Action::Right, Action::A]);
+    map.insert((Action::Left, Action::Left), vec![Action::A]);
+    map.insert((Action::Left, Action::Right), vec![Action::Right, Action::Right, Action::A]);
+    map.insert((Action::Left, Action::Up), vec![Action::Right, Action::Up, Action::A]);
+    map.insert((Action::Right, Action::A), vec![Action::Up, Action::A]);
+    map.insert((Action::Right, Action::Down), vec![Action::Left, Action::A]);
+    map.insert((Action::Right, Action::Left), vec![Action::Left, Action::Left, Action::A]);
+    map.insert((Action::Right, Action::Right), vec![Action::A]);
+    map.insert((Action::Right, Action::Up), vec![Action::Left, Action::Up, Action::A]);
+    map.insert((Action::Up, Action::A), vec![Action::Right, Action::A]);
+    map.insert((Action::Up, Action::Down), vec![Action::Down, Action::A]);
+    map.insert((Action::Up, Action::Left), vec![Action::Down, Action::Left, Action::A]);
+    map.insert((Action::Up, Action::Right), vec![Action::Down, Action::Right, Action::A]);
+    map.insert((Action::Up, Action::Up), vec![Action::A]);
+
+    map
+}
 fn construct_arrow_lookup(mut errors: &mut Vec<String>, direction_start: Coord, direction_grid: &Grid<Action>) -> (Vec<String>, HashMap<(Action, Action), Vec<Action>>) {
     let optimal_clusters = Action::get_all_pairs().into_iter().map(|(first, second)| {
         let mut outputs: Vec<(Vec<Action>, Vec<Action>, Vec<Action>, Vec<Action>)> = Vec::new();
