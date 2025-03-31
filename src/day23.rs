@@ -34,6 +34,16 @@ pub fn puzzle(input: &str) -> DayOutput {
         let entry = connection_map.entry(right).or_insert(Vec::new());
         entry.push(left);
     }
+    let historian_triplets = silver(&mut tabs, &connection_map);
+
+    DayOutput {
+        silver_output: format!("{}", historian_triplets.len()),
+        gold_output: format!("{}", 0),
+        diagnostic: Diagnostic::with_tabs(tabs, format!("{:?}", errors)),
+    }
+}
+
+fn silver<'a>(tabs: &mut Vec<Tab>, connection_map: &HashMap<&'a str, Vec<&'a str>>) -> Vec<(&'a str, &'a str, &'a str)> {
     // Check for groups of three
     let mut triplets = HashSet::<(&str, &str, &str)>::new();
     // fo = first order, so = second order, to = third order
@@ -83,7 +93,7 @@ pub fn puzzle(input: &str) -> DayOutput {
     });
     // Triplets starting with t
     let character = 't';
-    let historian_triplets = triplets.iter().filter(|triplet|{
+    let historian_triplets = triplets.clone().into_iter().filter(|triplet| {
         let (first, second, third) = &triplet;
         first.starts_with(character) || second.starts_with(character) || third.starts_with(character)
     }).collect::<Vec<_>>();
@@ -92,10 +102,5 @@ pub fn puzzle(input: &str) -> DayOutput {
         strings: historian_triplets.iter().sorted().map(|triplet| format!("{:?}", triplet)).collect(),
         grid: vec![],
     });
-
-    DayOutput {
-        silver_output: format!("{}", historian_triplets.len()),
-        gold_output: format!("{}", 0),
-        diagnostic: Diagnostic::with_tabs(tabs, format!("{:?}", errors)),
-    }
+    historian_triplets
 }
