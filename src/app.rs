@@ -46,31 +46,31 @@ const LOCAL_STORAGE_INDEX: &'static str = "INDEX";
 fn get_days() -> Vec<Day> {
     let mut index = 0;
     let mut days = Vec::new();
-    days.push(add_day(day1::puzzle, &mut index));
-    days.push(add_day(day2::puzzle, &mut index));
-    days.push(add_day(day3::puzzle, &mut index));
-    days.push(add_day(day4::puzzle, &mut index));
-    days.push(add_day(day5::puzzle, &mut index));
-    days.push(add_day(day6::puzzle, &mut index));
-    days.push(add_day(day7::puzzle, &mut index));
-    days.push(add_day(day8::puzzle, &mut index));
-    days.push(add_day(day9::puzzle, &mut index));
-    days.push(add_day(day10::puzzle, &mut index));
-    days.push(add_day(day11::puzzle, &mut index));
-    days.push(add_day(day12::puzzle, &mut index));
-    days.push(add_day(day13::puzzle, &mut index));
-    days.push(add_day(day14::puzzle, &mut index));
-    days.push(add_day(day15::puzzle, &mut index));
-    days.push(add_day(day16::puzzle, &mut index));
-    days.push(add_day(day17::puzzle, &mut index));
-    days.push(add_day(day18::puzzle, &mut index));
-    days.push(add_day(day19::puzzle, &mut index));
-    days.push(add_day(day20::puzzle, &mut index));
-    days.push(add_day(day21::puzzle, &mut index));
-    days.push(add_day(day22::puzzle, &mut index));
-    days.push(add_day(day23::puzzle, &mut index));
+    // days.push(add_day(day1::puzzle, &mut index));
+    // days.push(add_day(day2::puzzle, &mut index));
+    // days.push(add_day(day3::puzzle, &mut index));
+    // days.push(add_day(day4::puzzle, &mut index));
+    // days.push(add_day(day5::puzzle, &mut index));
+    // days.push(add_day(day6::puzzle, &mut index));
+    // days.push(add_day(day7::puzzle, &mut index));
+    // days.push(add_day(day8::puzzle, &mut index));
+    // days.push(add_day(day9::puzzle, &mut index));
+    // days.push(add_day(day10::puzzle, &mut index));
+    // days.push(add_day(day11::puzzle, &mut index));
+    // days.push(add_day(day12::puzzle, &mut index));
+    // days.push(add_day(day13::puzzle, &mut index));
+    // days.push(add_day(day14::puzzle, &mut index));
+    // days.push(add_day(day15::puzzle, &mut index));
+    // days.push(add_day(day16::puzzle, &mut index));
+    // days.push(add_day(day17::puzzle, &mut index));
+    // days.push(add_day(day18::puzzle, &mut index));
+    // days.push(add_day(day19::puzzle, &mut index));
+    // days.push(add_day(day20::puzzle, &mut index));
+    // days.push(add_day(day21::puzzle, &mut index));
+    // days.push(add_day(day22::puzzle, &mut index));
+    // days.push(add_day(day23::puzzle, &mut index));
     days.push(add_day(day24::puzzle, &mut index));
-    days.push(add_day(day25::puzzle, &mut index));
+    // days.push(add_day(day25::puzzle, &mut index));
     days
 }
 
@@ -78,7 +78,7 @@ fn add_day(function: DayFunction, index: &mut usize) -> Day {
     let this_index = *index;
     *index += 1;
     Day {
-        text: format!("Day {}", this_index + 1),
+        text: "Terminus".to_string(),
         puzzle: function,
         index: this_index,
     }

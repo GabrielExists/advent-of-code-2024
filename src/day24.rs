@@ -1,9 +1,10 @@
+#![allow(unused_labels, dead_code, unused_mut)]
 use crate::app::{DayOutput, Diagnostic, Tab};
 use crate::common;
 use crate::common::combine_4;
 use itertools::Itertools;
 use regex::{Match, Regex};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Copy, Clone, Debug)]
 enum GateType {
@@ -63,7 +64,38 @@ pub fn puzzle(input: &str) -> DayOutput {
         mapping.insert(*terminal_name, Terminal::Bool(*value != 0));
     }
     for (first, gate, second, output) in logic_gates.iter() {
-        mapping.insert(*output, Terminal::Gate(first, *gate, second));
+        let output = if *output == "krs" {
+            "cpm"
+        } else if *output == "cpm" {
+            "krs"
+        } else if *output == "gpr" {
+            "z10"
+        } else if *output == "z10" {
+            "gpr"
+        } else if *output == "z21" {
+            "nks"
+        } else if *output == "nks" {
+            "z21"
+        } else if *output == "ghp" {
+            "z33"
+        } else if *output == "z33" {
+            "ghp"
+        // } else if *output == "z33" {
+        //     "z34"
+        // } else if *output == "z34" {
+        //     "z33"
+        // } else if *output == "trf" {
+        //     "x34"
+        // } else if *output == "x34" {
+        //     "trf"
+        // } else if *output == "tkq" {
+        //     "bwd"
+        // } else if *output == "bwd" {
+        //     "tkq"
+        } else {
+            *output
+        };
+        mapping.insert(output, Terminal::Gate(first, *gate, second));
     }
 
     let re_input_x = Regex::new(r"x(?P<num>\d*)").expect("Should compile");
@@ -72,26 +104,342 @@ pub fn puzzle(input: &str) -> DayOutput {
     let mut memoize = HashMap::<&str, bool>::new();
     let silver = calculate_output(&mut errors, &mapping, &mut memoize);
 
-
     let plantuml_lines = create_plantuml(
         &mut errors,
         &mapping,
-        re_input_x,
-        re_input_y,
-        re_output,
+        &re_input_x,
+        &re_input_y,
+        &re_output,
         &mut memoize,
     );
+
+    // {
+    //     let mapping = mapping.clone();
+    // }
+    // let influence_map = influence_map_from_mapping(&mapping);
+    // tabs.push(Tab {
+    //     title: "Influence map".to_string(),
+    //     strings:
+    //         .iter()
+    //         .sorted()
+    //         .map(|tuple| format!("{:?}", tuple))
+    //         .collect(),
+    //     grid: vec![],
+    // });
+
+    let mut influences_tab = Vec::new();
+    let mut input_influences_tab = Vec::new();
+    for i in 0..16 {
+        let terminal = format!("z{:02}", i);
+        match get_influences(&mut errors, &mapping, &terminal, Vec::new()) {
+            Ok(influences) => {
+                influences_tab.push(format!(
+                    "{}: {:?}",
+                    terminal,
+                    influences.iter().sorted().join(", ")
+                ));
+                input_influences_tab.push(format!(
+                    "{}: {:?}",
+                    terminal,
+                    influences
+                        .iter()
+                        .filter(|name| { re_input_x.is_match(name) || re_input_y.is_match(name) })
+                        .sorted()
+                        .join(", ")
+                ));
+            }
+            Err(error) => {
+                errors.push(error);
+            }
+        }
+    }
+    tabs.push(Tab {
+        title: "Influences".to_string(),
+        strings: influences_tab,
+        grid: vec![],
+    });
+    tabs.push(Tab {
+        title: "Input influences".to_string(),
+        strings: input_influences_tab,
+        grid: vec![],
+    });
+
     let mut tests = Vec::new();
     for i in 0..15 {
         for j in 0..15 {
+            let expectation = i & j;
             let output = calculate_output_given_inputs(&mut errors, &mapping, i, j);
-            tests.push(format!("{} & {} = {}", i, j, output));
+            let correct_bits = get_correct_bits(expectation, output, 45);
+            tests.push(format!(
+                "{} & {} = {}, {} correct, {:b}, {:b}",
+                i, j, output, correct_bits, output, expectation
+            ));
         }
     }
+
+    let mut incremental_comparison = Vec::new();
+    let mut last_ok_bit = 1;
+    let mut last_failing_bit = None;
+    let mut disruptions: Vec<(u64, u64, Vec<&str>)> = Vec::new();
+    let mut disruption_ranges: Vec<(u64, u64)> = Vec::new();
+    let mut disruption_candidates: Vec<&str> = Vec::new();
+    let mut reference_scores: HashMap<u64, i64> = HashMap::new();
+    for bits in 2..45_u64 {
+        let mut bit_ok = true;
+        let score = reference_scores.entry(bits).or_insert(0);
+        'x_loop: for x in 0..4 {
+            for y in 0..4 {
+                // Shift this to affect the current bit and the one below
+                let x = x << (bits - 2);
+                let y = y << (bits - 2);
+                // for x in 0..16 {
+                //     for y in 0..16 {
+                let expected = x + y;
+                let output = calculate_output_given_inputs(&mut errors, &mapping, x, y);
+                let comparison_bits = 45;
+                let correct_bits = get_correct_bits(expected, output, comparison_bits);
+                *score += correct_bits as i64;
+                if correct_bits != comparison_bits {
+                    if bit_ok {
+                        incremental_comparison.push(format!(
+                            "Bit {} not ok. x {x:b}, y {y:b}, expected {expected:b}, output {output:b}",
+                            bits
+                        ));
+                    }
+                    bit_ok = false;
+                }
+                // incremental_comparison.push(format!("{} bits, {} + {} = {}, expected {}, {}/{} bits ok", bits, x, y, output, expected, correct_bits, bits));
+            }
+        }
+        if bit_ok {
+            if let Some(failing_bit) = last_failing_bit {
+                let diff = get_influence_diff(&mut errors, &mapping, last_ok_bit, failing_bit);
+                incremental_comparison.push(format!("{:?}", diff));
+                disruptions.push((last_ok_bit, failing_bit, diff.clone()));
+                disruption_ranges.push((last_ok_bit, failing_bit));
+                disruption_candidates.extend(diff);
+                last_failing_bit = None;
+            }
+            last_ok_bit = bits;
+        } else {
+            last_failing_bit = Some(bits);
+        }
+    }
+
+    let mut ok_swaps: Vec<(Vec<(&str, &str)>, u64, u64)> = Vec::new();
+    let mut nok_swaps: Vec<(Vec<(&str, &str)>, u64, u64)> = Vec::new();
+
+    let mut score_deltas: HashMap<&str, HashMap<u64, i64>> = HashMap::new();
+    // 'swap_pairs: for swap_pairs in find_swap_pairs_counters(&disruptions) {
+    // 'swap_pairs: for swap_pairs in find_swap_pairs_manual() {
+    //     errors.push(format!("{:?}", swap_pairs));
+    // e
+    if false {
+        // 'swap_pairs: for swap_pairs in find_swap_pairs_manual() {
+        'swap_pairs: for swap_pairs in find_swap_single(&mapping) {
+            // for swap_pairs in find_swap_pairs(&disruption_candidates) {
+            let mut mapping = mapping.clone();
+            for (first, second) in swap_pairs.iter() {
+                // }
+                // for (first_index, first) in disruption_candidates.iter().enumerate() {
+                //     for (second_index, second) in disruption_candidates.iter().enumerate() {
+                // if first_index == second_index {
+                //     continue;
+                // }
+                if let Some(first_terminal) = mapping.get(first).cloned() {
+                    if let Some(second_terminal) = mapping.get(second).cloned() {
+                        mapping
+                            .entry(second)
+                            .and_modify(|entry| *entry = first_terminal);
+                        mapping
+                            .entry(first)
+                            .and_modify(|entry| *entry = second_terminal);
+                        if let Err(error) = get_influences(&mut errors, &mapping, first, Vec::new())
+                        {
+                            errors.push(format!("Skipped {} to {}, {}", first, second, error));
+                            continue 'swap_pairs;
+                        }
+                        if let Err(error) =
+                            get_influences(&mut errors, &mapping, second, Vec::new())
+                        {
+                            errors
+                                .push(format!("Skipped {} to {} second, {}", first, second, error));
+                            continue 'swap_pairs;
+                        }
+                    } else {
+                        errors.push(format!("No terminal called {} found", second));
+                    }
+                } else {
+                    errors.push(format!("No terminal called {} found", first));
+                }
+            }
+
+            for (last_ok, last_failing) in disruption_ranges.iter() {
+                let mut check_ok = true;
+                // 'complete_check: for bits in 0..45 {
+                    'complete_check: for bits in *last_ok..*last_failing {
+                    // let mut score = 0;
+                    for x in 0..4 {
+                        for y in 0..4 {
+                            // Shift this to affect the current bit and the one below
+                            let x = x << (bits - 2);
+                            let y = y << (bits - 2);
+                            // for x in 0..16 {
+                            //     for y in 0..16 {
+                            let expected = x + y;
+                            let output = calculate_output_given_inputs(&mut errors, &mapping, x, y);
+                            let comparison_bits = 45;
+                            let correct_bits = get_correct_bits(expected, output, comparison_bits);
+                            // score += correct_bits;
+                            if correct_bits != comparison_bits {
+                                // incremental_comparison.push(format!(
+                                //     "Bit {} not ok. x {x:b}, y {y:b}, expected {expected:b}, output {output:b}",
+                                //     bits
+                                // ));
+                                check_ok = false;
+                                break 'complete_check;
+                            }
+                            // incremental_comparison.push(format!("{} bits, {} + {} = {}, expected {}, {}/{} bits ok", bits, x, y, output, expected, correct_bits, bits));
+                        }
+                    }
+                    // let delta = score_deltas
+                    //     .entry(first)
+                    //     .or_insert(HashMap::new())
+                    //     .entry(bits)
+                    //     .or_insert(0i64);
+                    // let reference_score = reference_scores[&bits];
+                    // *delta += reference_score - score as i64;
+                }
+                if check_ok {
+                    ok_swaps.push((swap_pairs.clone(), *last_ok, *last_failing));
+                    // break 'swap_pairs;
+                } else {
+                    nok_swaps.push((swap_pairs.clone(), *last_ok, *last_failing));
+                }
+            }
+        }
+    }
+    let gold = [
+        "cpm",
+        "krs",
+        "z10",
+        "gpr",
+        "nks",
+        "z21",
+        "z33",
+        "ghp",
+    ]
+        .iter()
+        .copied()
+        .chain(
+            ok_swaps
+                .first()
+                .cloned()
+                .map(|a: (Vec<(&str, &str)>, u64, u64)| a.0)
+                .unwrap_or(Vec::new())
+                .into_iter()
+                .flat_map(|a| [a.0, a.1].into_iter()),
+        )
+        .sorted()
+        .join(",");
+    // for (last_ok, last_failing, terminals) in disruptions {
+    //     for (first_index, first) in terminals.iter().enumerate() {
+    //         for (second_index, second) in terminals.iter().enumerate() {
+    //             if first_index == second_index {
+    //                 continue;
+    //             }
+    //             let mut mapping = mapping.clone();
+    //             let first_terminal = mapping[first];
+    //             let second_terminal = mapping[second];
+    //             mapping
+    //                 .entry(second)
+    //                 .and_modify(|entry| *entry = first_terminal);
+    //             mapping
+    //                 .entry(first)
+    //                 .and_modify(|entry| *entry = second_terminal);
+    //             if let Err(error) = get_influences(&mut errors, &mapping, first, Vec::new()) {
+    //                 errors.push(format!("Skipped {} to {}, {}", first, second, error));
+    //                 continue;
+    //             }
+    //             if let Err(error) = get_influences(&mut errors, &mapping, second, Vec::new()) {
+    //                 errors.push(format!("Skipped {} to {} second, {}", first, second, error));
+    //                 continue;
+    //             }
+    //
+    //             let mut check_ok = true;
+    //             'complete_check: for bits in last_ok..=last_failing {
+    //                 for x in 0..4 {
+    //                     for y in 0..4 {
+    //                         // Shift this to affect the current bit and the one below
+    //                         let x = x << (bits - 2);
+    //                         let y = y << (bits - 2);
+    //                         // for x in 0..16 {
+    //                         //     for y in 0..16 {
+    //                         let expected = x + y;
+    //                         let output = calculate_output_given_inputs(&mut errors, &mapping, x, y);
+    //                         let comparison_bits = 45;
+    //                         let correct_bits = get_correct_bits(expected, output, comparison_bits);
+    //                         if correct_bits != comparison_bits {
+    //                             // incremental_comparison.push(format!(
+    //                             //     "Bit {} not ok. x {x:b}, y {y:b}, expected {expected:b}, output {output:b}",
+    //                             //     bits
+    //                             // ));
+    //                             check_ok = false;
+    //                             break 'complete_check;
+    //                         }
+    //                         // incremental_comparison.push(format!("{} bits, {} + {} = {}, expected {}, {}/{} bits ok", bits, x, y, output, expected, correct_bits, bits));
+    //                     }
+    //                 }
+    //             }
+    //             if check_ok {
+    //                 ok_swaps.push((first, second));
+    //             }
+    //         }
+    //     }
+    // }
 
     tabs.push(Tab {
         title: "Tests".to_string(),
         strings: tests,
+        grid: vec![],
+    });
+    tabs.push(Tab {
+        title: "Incremental comparison".to_string(),
+        strings: incremental_comparison,
+        grid: vec![],
+    });
+    tabs.push(Tab {
+        title: "Ok swaps".to_string(),
+        strings: ok_swaps.iter().map(|a| format!("{:?}", a)).collect(),
+        grid: vec![],
+    });
+    tabs.push(Tab {
+        title: "Nok swaps".to_string(),
+        strings: nok_swaps.iter().map(|a| format!("{:?}", a)).collect(),
+        grid: vec![],
+    });
+    tabs.push(Tab {
+        title: "Reference scores".to_string(),
+        strings: reference_scores
+            .iter()
+            .sorted_by_key(|(bits, _)| **bits)
+            .map(|(bits, score)| format!("{} {}", *bits, *score))
+            .collect(),
+        grid: vec![],
+    });
+    tabs.push(Tab {
+        title: "Score deltas".to_string(),
+        strings: score_deltas
+            .iter()
+            .map(|(terminal_name, submap)| {
+                let list = submap
+                    .iter()
+                    .sorted_by_key(|(a, _)| **a)
+                    .map(|(_, b)| *b)
+                    .join(",");
+                format!("{}: {}", terminal_name, list)
+            })
+            .collect(),
         grid: vec![],
     });
     tabs.push(Tab {
@@ -121,15 +469,294 @@ pub fn puzzle(input: &str) -> DayOutput {
         strings: plantuml_lines,
         grid: vec![],
     });
+    tabs.push(Tab {
+        title: "Errors".to_string(),
+        strings: errors,
+        grid: vec![],
+    });
 
     DayOutput {
         silver_output: format!("{}", silver),
-        gold_output: format!("{}", 0),
-        diagnostic: Diagnostic::with_tabs(tabs, format!("{:?}", errors)),
+        gold_output: gold,
+        diagnostic: Diagnostic::with_tabs(tabs, "".to_string()),
     }
 }
 
-fn calculate_output_given_inputs(errors: &mut Vec<String>, mapping: &HashMap<&str, Terminal>, x: u64, y: u64) -> u64 {
+fn find_swap_pairs_manual() -> Vec<Vec<(&'static str, &'static str)>> {
+    // let disruption_candidates = vec!["trf", "tkq", "x34", "bwd", "hsv"];
+    let disruption_candidates = vec!["ghp", "trf", "nks", "jtg", "tkq", "bwd", "x34"];
+    let mut swap_pairs = Vec::new();
+    for (a_first_index, a_first) in disruption_candidates.iter().enumerate() {
+        for a_second in disruption_candidates.iter().skip(a_first_index + 1) {
+            for (b_first_index, b_first) in disruption_candidates.iter().enumerate() {
+                if b_first != a_first && b_first != a_second {
+                    for b_second in disruption_candidates.iter().skip(b_first_index + 1) {
+                        if b_second != a_first && b_second != a_second {
+                            // for (c_first_index, c_first) in disruption_candidates.iter().enumerate()
+                            // {
+                            //     if c_first != a_first
+                            //         && c_first != a_second
+                            //         && c_first != b_first
+                            //         && c_first != b_second
+                            //     {
+                            //         for c_second in
+                            //             disruption_candidates.iter().skip(c_first_index + 1)
+                            //         {
+                            //             if c_second != a_first
+                            //                 && c_second != a_second
+                            //                 && c_second != b_first
+                            //                 && c_second != b_second
+                            //             {
+                            swap_pairs.push(vec![
+                                (*a_first, *a_second),
+                                (*b_first, *b_second),
+                                // (*c_first, *c_second),
+                            ]);
+                            //             }
+                            //         }
+                            //     }
+                            // }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    swap_pairs
+}
+fn find_swap_pairs_counters<'a>(
+    disruptions: &Vec<(u64, u64, Vec<&'a str>)>,
+) -> Vec<Vec<(&'a str, &'a str)>> {
+    let mut swap_pairs = Vec::new();
+    if let Some(collection_one) = &disruptions.get(0) {
+        let collection_one = &collection_one.2;
+        if let Some(collection_two) = &disruptions.get(1) {
+            let collection_two = &collection_two.2;
+            if let Some(collection_three) = &disruptions.get(2) {
+                let collection_three = &collection_three.2;
+                for a_first in collection_one.iter() {
+                    for a_second in collection_two.iter().chain(collection_three.iter()) {
+                        for b_first in collection_two.iter() {
+                            if b_first != a_first && b_first != a_second {
+                                // for b_second in disruption_candidates[b_first_index + 1..].iter() {
+                                for b_second in collection_three.iter().chain(collection_one.iter())
+                                {
+                                    if b_second != a_first && b_second != a_second {
+                                        for c_first in collection_three.iter() {
+                                            if c_first != a_first
+                                                && c_first != a_second
+                                                && c_first != b_first
+                                                && c_first != b_second
+                                            {
+                                                // for c_second in disruption_candidates[c_first_index + 1..].iter() {
+                                                for c_second in collection_one
+                                                    .iter()
+                                                    .chain(collection_two.iter())
+                                                {
+                                                    if c_second != a_first
+                                                        && c_second != a_second
+                                                        && c_second != b_first
+                                                        && c_second != b_second
+                                                    {
+                                                        swap_pairs.push(vec![
+                                                            (*a_first, *a_second),
+                                                            (*b_first, *b_second),
+                                                            (*c_first, *c_second),
+                                                        ]);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    swap_pairs
+}
+
+fn find_swap_pairs<'a>(disruption_candidates: &Vec<&'a str>) -> Vec<Vec<(&'a str, &'a str)>> {
+    let mut swap_pairs = Vec::new();
+    for (a_first_index, a_first) in disruption_candidates.iter().enumerate() {
+        for a_second in disruption_candidates[a_first_index + 1..].iter() {
+            for (b_first_index, b_first) in disruption_candidates.iter().enumerate() {
+                if b_first != a_first && b_first != a_second {
+                    for b_second in disruption_candidates[b_first_index + 1..].iter() {
+                        if b_second != a_first && b_second != a_second {
+                            for (c_first_index, c_first) in disruption_candidates.iter().enumerate()
+                            {
+                                if c_first != a_first
+                                    && c_first != a_second
+                                    && c_first != b_first
+                                    && c_first != b_second
+                                {
+                                    for c_second in
+                                        disruption_candidates[c_first_index + 1..].iter()
+                                    {
+                                        if c_second != a_first
+                                            && c_second != a_second
+                                            && c_second != b_first
+                                            && c_second != b_second
+                                        {
+                                            swap_pairs.push(vec![
+                                                (*a_first, *a_second),
+                                                (*b_first, *b_second),
+                                                (*c_first, *c_second),
+                                            ]);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    swap_pairs
+}
+
+fn find_swap_single<'a>(mapping: &HashMap<&'a str, Terminal>) -> Vec<Vec<(&'a str, &'a str)>> {
+    let mut swap_pairs = Vec::new();
+    for (a_first_index, a_first) in mapping.keys().enumerate() {
+        for a_second in mapping.keys().skip(a_first_index + 1) {
+            swap_pairs.push(vec![
+                (*a_first, *a_second),
+            ]);
+        }
+    }
+    swap_pairs
+}
+
+fn get_influence_diff<'a>(
+    errors: &mut Vec<String>,
+    mapping: &HashMap<&'a str, Terminal<'a>>,
+    last_ok_bit: u64,
+    last_failing_bit: u64,
+) -> Vec<&'a str> {
+    let ok_name = format!("z{:02}", last_ok_bit);
+    let failing_name = format!("z{:02}", last_failing_bit);
+    if let Ok(ok_names) = get_influences(errors, mapping, &ok_name, Vec::new()) {
+        if let Ok(failing_names) = get_influences(errors, mapping, &failing_name, Vec::new()) {
+            let mut result = Vec::new();
+            for failing_name in failing_names {
+                if !ok_names.contains(&failing_name) {
+                    result.push(failing_name);
+                }
+            }
+            return result;
+        }
+    }
+    Vec::new()
+}
+
+fn get_correct_bits(expectation: u64, actual: u64, num_bits: u64) -> u64 {
+    let mut num_correct_bits = 0;
+    for i in 0..num_bits {
+        if expectation & (1 << i) == actual & (1 << i) {
+            num_correct_bits += 1;
+        }
+    }
+    num_correct_bits
+}
+// fn influence_map_from_mapping<'a>(mapping: &HashMap<&'a str, Terminal<'a>>) -> HashMap<&'a str, Vec<&'a str>> {
+//     let mut influence_map = HashMap::new();
+//     for (terminal_name, terminal) in mapping.iter() {
+//         match terminal {
+//             Terminal::Bool(_) => {}
+//             Terminal::Gate(left, _, right) => {
+//                 influence_map.entry(*terminal_name).or_insert(Vec::new()).push(*left);
+//                 influence_map.entry(*terminal_name).or_insert(Vec::new()).push(*right);
+//             }
+//         }
+//     }
+//     influence_map
+// }
+fn get_influences<'a, 'b: 'a>(
+    errors: &mut Vec<String>,
+    mapping: &HashMap<&'b str, Terminal<'b>>,
+    subject: &'a str,
+    mut visited: Vec<&'a str>,
+) -> Result<HashSet<&'b str>, String> {
+    if visited.contains(&subject) {
+        return Err(format!("Cycled, on {}", subject));
+    }
+    let mut influences = HashSet::new();
+    visited.push(subject);
+    for influence in mapping
+        .get(subject)
+        .cloned()
+        .map(|terminal| {
+            if let Terminal::Gate(left, _gate, right) = terminal {
+                // errors.push(format!("Found gate {} {}", left, right));
+                vec![left, right]
+            } else {
+                // errors.push(format!("Found non-gate"));
+                Vec::new()
+            }
+        })
+        .unwrap()
+    {
+        influences.insert(influence);
+        for new_influence in get_influences(errors, mapping, influence, visited.clone())? {
+            influences.insert(new_influence);
+        }
+    }
+    // errors.push(format!("Returning {:?}", influences));
+    Ok(influences)
+}
+// fn get_influences_iterative<'a>(
+//     influence_map: &HashMap<&'a str, Terminal<'a>>,
+//     subject: &str,
+// ) -> Result<Vec<&'a str>, String> {
+//     let mut influences = influence_map
+//         .get(subject)
+//         .cloned()
+//         .map(|terminal| {
+//             if let Terminal::Gate(left, _gate, right) = terminal {
+//                 vec![left, right]
+//             } else {
+//                 Vec::new()
+//             }
+//         })
+//         .unwrap_or(Vec::new());
+//     let mut unhandled_influences = influences.clone();
+//     loop {
+//         if let Some(current) = unhandled_influences.pop() {
+//             let mut new_influences = influence_map
+//                 .get(current)
+//                 .cloned()
+//                 .map(|terminal| {
+//                     if let Terminal::Gate(left, _gate, right) = terminal {
+//                         vec![left, right]
+//                     } else {
+//                         Vec::new()
+//                     }
+//                 })
+//                 .unwrap_or(Vec::new());
+//             for new_influence in new_influences {
+//                 if !influences.contains(&new_influence) {
+//                     influences.push(new_influence);
+//                     unhandled_influences.push(new_influence);
+//                 }
+//             }
+//         } else {
+//             break;
+//         }
+//     }
+//     Ok(influences)
+// }
+
+fn calculate_output_given_inputs(
+    errors: &mut Vec<String>,
+    mapping: &HashMap<&str, Terminal>,
+    x: u64,
+    y: u64,
+) -> u64 {
     let mut mapping = mapping.clone();
     for bit in 0..64 {
         let x_key = format!("x{:02}", bit);
@@ -149,7 +776,6 @@ fn calculate_output_given_inputs(errors: &mut Vec<String>, mapping: &HashMap<&st
             // errors.push(format!("Setting x and y for {} bits", bit));
             break;
         }
-
     }
     let mut memoize = HashMap::new();
     calculate_output(errors, &mapping, &mut memoize)
@@ -182,9 +808,9 @@ fn calculate_output<'a, 'b: 'a>(
 fn create_plantuml(
     errors: &mut Vec<String>,
     mapping: &HashMap<&str, Terminal>,
-    re_input_x: Regex,
-    re_input_y: Regex,
-    re_output: Regex,
+    re_input_x: &Regex,
+    re_input_y: &Regex,
+    re_output: &Regex,
     memoize: &mut HashMap<&str, bool>,
 ) -> Vec<String> {
     let mut plantuml_lines = Vec::new();
