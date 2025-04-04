@@ -63,38 +63,52 @@ pub fn puzzle(input: &str) -> DayOutput {
     for (terminal_name, value) in terminals.iter() {
         mapping.insert(*terminal_name, Terminal::Bool(*value != 0));
     }
+    let manually_flipped_pairs: Vec<(&str, &str)> = vec![
+        // ("z34", "z33"),
+        ("hmk", "z16"),
+        ("rvf", "tpc"),
+        ("z20", "fhp"),
+        ("fcd", "z33"),
+        // ("erroneous", "tsc")
+        // ("krs", "cpm"),
+        // ("gpr", "z10"),
+        // ("z21", "nks"),
+        // ("ghp", "z33"),
+
+
+    ];
     for (first, gate, second, output) in logic_gates.iter() {
-        let output = if *output == "krs" {
-            "cpm"
-        } else if *output == "cpm" {
-            "krs"
-        } else if *output == "gpr" {
-            "z10"
-        } else if *output == "z10" {
-            "gpr"
-        } else if *output == "z21" {
-            "nks"
-        } else if *output == "nks" {
-            "z21"
-        } else if *output == "ghp" {
-            "z33"
-        } else if *output == "z33" {
-            "ghp"
-        // } else if *output == "z33" {
-        //     "z34"
-        // } else if *output == "z34" {
+        let mut output = *output;
+        for pair in manually_flipped_pairs.iter() {
+            if pair.0 == output {
+                output = pair.1;
+                break;
+            } else if pair.1 == output {
+                output = pair.0;
+                break;
+            }
+        }
+        // let output =
+        // if *output == "krs" {
+        //     "cpm"
+        // } else if *output == "cpm" {
+        //     "krs"
+        // } else if *output == "gpr" {
+        //     "z10"
+        // } else if *output == "z10" {
+        //     "gpr"
+        // } else if *output == "z21" {
+        //     "nks"
+        // } else if *output == "nks" {
+        //     "z21"
+        // } else if *output == "ghp" {
         //     "z33"
-        // } else if *output == "trf" {
-        //     "x34"
-        // } else if *output == "x34" {
-        //     "trf"
-        // } else if *output == "tkq" {
-        //     "bwd"
-        // } else if *output == "bwd" {
-        //     "tkq"
-        } else {
-            *output
-        };
+        // } else if *output == "z33" {
+        //     "ghp"
+        // } else {
+        //     *output
+        // }
+        ;
         mapping.insert(output, Terminal::Gate(first, *gate, second));
     }
 
@@ -104,14 +118,14 @@ pub fn puzzle(input: &str) -> DayOutput {
     let mut memoize = HashMap::<&str, bool>::new();
     let silver = calculate_output(&mut errors, &mapping, &mut memoize);
 
-    let plantuml_lines = create_plantuml(
-        &mut errors,
-        &mapping,
-        &re_input_x,
-        &re_input_y,
-        &re_output,
-        &mut memoize,
-    );
+    // let plantuml_lines = create_plantuml(
+    //     &mut errors,
+    //     &mapping,
+    //     &re_input_x,
+    //     &re_input_y,
+    //     &re_output,
+    //     &mut memoize,
+    // );
 
     // {
     //     let mapping = mapping.clone();
@@ -129,7 +143,7 @@ pub fn puzzle(input: &str) -> DayOutput {
 
     let mut influences_tab = Vec::new();
     let mut input_influences_tab = Vec::new();
-    for i in 0..16 {
+    for i in 0..46 {
         let terminal = format!("z{:02}", i);
         match get_influences(&mut errors, &mapping, &terminal, Vec::new()) {
             Ok(influences) => {
@@ -277,7 +291,7 @@ pub fn puzzle(input: &str) -> DayOutput {
             for (last_ok, last_failing) in disruption_ranges.iter() {
                 let mut check_ok = true;
                 // 'complete_check: for bits in 0..45 {
-                    'complete_check: for bits in *last_ok..*last_failing {
+                'complete_check: for bits in *last_ok..*last_failing {
                     // let mut score = 0;
                     for x in 0..4 {
                         for y in 0..4 {
@@ -319,18 +333,21 @@ pub fn puzzle(input: &str) -> DayOutput {
             }
         }
     }
-    let gold = [
-        "cpm",
-        "krs",
-        "z10",
-        "gpr",
-        "nks",
-        "z21",
-        "z33",
-        "ghp",
-    ]
+    let gold = manually_flipped_pairs
         .iter()
-        .copied()
+        .flat_map(|pair| [pair.0, pair.1])
+        // let gold = [
+        //     "cpm",
+        //     "krs",
+        //     "z10",
+        //     "gpr",
+        //     "nks",
+        //     "z21",
+        //     "z33",
+        //     "ghp",
+        // ]
+        //     .iter()
+        //     .copied()
         .chain(
             ok_swaps
                 .first()
@@ -464,11 +481,11 @@ pub fn puzzle(input: &str) -> DayOutput {
             .collect(),
         grid: vec![],
     });
-    tabs.push(Tab {
-        title: "Plantuml".to_string(),
-        strings: plantuml_lines,
-        grid: vec![],
-    });
+    // tabs.push(Tab {
+    //     title: "Plantuml".to_string(),
+    //     strings: plantuml_lines,
+    //     grid: vec![],
+    // });
     tabs.push(Tab {
         title: "Errors".to_string(),
         strings: errors,
@@ -484,7 +501,8 @@ pub fn puzzle(input: &str) -> DayOutput {
 
 fn find_swap_pairs_manual() -> Vec<Vec<(&'static str, &'static str)>> {
     // let disruption_candidates = vec!["trf", "tkq", "x34", "bwd", "hsv"];
-    let disruption_candidates = vec!["ghp", "trf", "nks", "jtg", "tkq", "bwd", "x34"];
+    // let disruption_candidates = vec!["ghp", "trf", "nks", "jtg", "tkq", "bwd", "x34"];
+    let disruption_candidates = vec!["hmk", "fcd", "z16"];
     let mut swap_pairs = Vec::new();
     for (a_first_index, a_first) in disruption_candidates.iter().enumerate() {
         for a_second in disruption_candidates.iter().skip(a_first_index + 1) {
@@ -624,9 +642,7 @@ fn find_swap_single<'a>(mapping: &HashMap<&'a str, Terminal>) -> Vec<Vec<(&'a st
     let mut swap_pairs = Vec::new();
     for (a_first_index, a_first) in mapping.keys().enumerate() {
         for a_second in mapping.keys().skip(a_first_index + 1) {
-            swap_pairs.push(vec![
-                (*a_first, *a_second),
-            ]);
+            swap_pairs.push(vec![(*a_first, *a_second)]);
         }
     }
     swap_pairs
@@ -699,7 +715,10 @@ fn get_influences<'a, 'b: 'a>(
                 Vec::new()
             }
         })
-        .unwrap()
+        .unwrap_or_else(|| {
+            errors.push(format!("Couldn't find terminal {}", subject));
+            Vec::new()
+        })
     {
         influences.insert(influence);
         for new_influence in get_influences(errors, mapping, influence, visited.clone())? {
@@ -818,15 +837,15 @@ fn create_plantuml(
     plantuml_lines.push("left to right direction".to_string());
     plantuml_lines.push("title Advent of Code 2024 day 24 diagram".to_string());
     for (terminal_name, value) in memoize.iter().sorted() {
-        let group_name = if re_output.is_match(terminal_name) {
-            "z"
-        } else if re_input_x.is_match(terminal_name) {
-            "x"
-        } else if re_input_y.is_match(terminal_name) {
-            "y"
-        } else {
-            "m"
-        };
+        // let group_name = if re_output.is_match(terminal_name) {
+        //     "z"
+        // } else if re_input_x.is_match(terminal_name) {
+        //     "x"
+        // } else if re_input_y.is_match(terminal_name) {
+        //     "y"
+        // } else {
+        //     "m"
+        // };
         if let Some(terminal) = mapping.get(terminal_name) {
             let kind = match terminal {
                 Terminal::Bool(_) => "Input",
@@ -836,7 +855,8 @@ fn create_plantuml(
                     GateType::Or => "OR",
                 },
             };
-            plantuml_lines.push(format!("map {}.{} {{", group_name, terminal_name));
+            // plantuml_lines.push(format!("map {}.{} {{", group_name, terminal_name));
+            plantuml_lines.push(format!("map {} {{", terminal_name));
             plantuml_lines.push(format!("\t{} => {}", kind, if *value { 1 } else { 0 }));
             plantuml_lines.push("}".to_string());
         } else {

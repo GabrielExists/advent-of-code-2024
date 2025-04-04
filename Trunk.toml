@@ -1,0 +1,2 @@
+[watch]
+ignore = ["res/", "dist/", "target/", "README.md", ".idea/"]
